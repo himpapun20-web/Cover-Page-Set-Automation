@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ project.project_name }} — CCTV Survey Report</title>
+<style>
+@page { size:A4 portrait; margin:18mm 15mm; @top-left { content:element(page-header); } @bottom-left { content:element(page-footer); } @bottom-right { content:counter(page); color:#444; font-size:8pt; } }
+@page cover { size:A4 portrait; margin:0; @top-left { content:none; } @bottom-left { content:none; } @bottom-right { content:none; } }
+* { box-sizing:border-box; }
+html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif; color:#15191c; font-size:9pt; line-height:1.45; }
+.cover { page:cover; position:relative; isolation:isolate; height:297mm; padding:16mm 14mm 12mm; display:flex; flex-direction:column; justify-content:space-between; }
+.cover-background { position:absolute; z-index:0; inset:0; width:100%; height:100%; object-fit:cover; }
+.cover > :not(.cover-background) { position:relative; z-index:1; }
+.cover-company { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:1pt solid #20272c; padding-bottom:4mm; }
+.wordmark { display:flex; align-items:center; gap:4mm; max-width:75mm; }
+.company-logo { width:20mm; height:17mm; object-fit:contain; flex:none; }
+.company-name { font-size:12pt; font-weight:bold; text-transform:uppercase; }
+.company-contact { max-width:99mm; text-align:right; font-size:7.4pt; line-height:1.35; }
+.cover-title { text-align:center; margin-top:6mm; }
+.cover-title h1 { font-size:22pt; text-transform:uppercase; text-decoration:underline; text-underline-offset:3pt; margin:8mm 0 2mm; }
+.cover-meta { width:100%; border-collapse:collapse; margin:7mm 0 0 10mm; font-size:12pt; }
+.cover-meta td { padding:3mm 2mm; vertical-align:top; }
+.cover-meta td:first-child { width:30%; font-weight:bold; }
+.cover-meta td:nth-child(2) { width:5%; font-weight:bold; }
+.cover-footer { border-top:.5pt solid #737b80; padding-top:2mm; text-align:center; font-size:7pt; }
+.running-header { position:running(page-header); width:180mm; display:flex; justify-content:space-between; gap:8mm; border-bottom:.6pt solid #343a40; padding:0 0 2mm; font-size:7.5pt; }
+.running-footer { position:running(page-footer); width:180mm; display:flex; justify-content:space-between; border-top:.5pt solid #777; padding-top:2mm; font-size:7pt; }
+.section { page-break-before:always; break-before:page; }
+.section-title { font-size:14pt; line-height:1.2; margin:0 0 6mm; text-transform:uppercase; }
+.sub-title { font-size:11pt; margin:0 0 4mm; }
+.certificate { min-height:225mm; display:flex; flex-direction:column; justify-content:center; text-align:center; border:1.2pt solid #1d5571; padding:15mm; }
+.certificate h2 { font-size:19pt; margin:0 0 12mm; }
+.certificate-number { font-size:14pt; font-weight:bold; padding:5mm; border-bottom:1pt solid #1d5571; }
+.statement-copy, .intro-copy, .method-copy { white-space:pre-wrap; }
+.statement-copy { margin-top:12mm; }
+.contents-title { text-align:center; margin:4mm auto 12mm; width:max-content; border-bottom:1pt solid #111; font-size:14pt; text-transform:uppercase; }
+.toc { list-style:none; margin:0; padding:0 9mm; }
+.toc li { display:flex; gap:3mm; align-items:baseline; padding:2mm 0; border-bottom:.3pt dotted #aaa; }
+.toc-num { width:9mm; flex:none; }
+.toc a { flex:1; color:#111; text-decoration:none; }
+.toc a::after { content:leader(".") target-counter(attr(href),page); }
+.intro-copy { margin-bottom:8mm; }
+.method-copy { margin-left:4mm; }
+.data-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7pt; margin:4mm 0; }
+.data-table th, .data-table td { border:.5pt solid #333; padding:1.5mm 1mm; vertical-align:top; overflow-wrap:anywhere; }
+.data-table th { background:#f1f3f4; text-align:center; }
+.small { font-size:7.5pt; }
+.grade-notes { margin-top:4mm; font-size:8pt; }
+.grade-notes p { margin:1.5mm 0; }
+.material-title { font-weight:bold; margin:6mm 0 1mm; }
+.material-table { width:100%; max-width:130mm; border-collapse:collapse; font-size:9pt; }
+.material-table td { padding:.5mm 2mm; vertical-align:top; }
+.material-table .code { width:12mm; }
+.material-table .equals { width:10mm; text-align:center; }
+.conclusion-copy { white-space:pre-wrap; }
+.recommendation-copy { margin:5mm 0; }
+.section-divider { min-height:245mm; display:flex; flex-direction:column; justify-content:center; border-top:1pt solid #444; border-bottom:1pt solid #444; padding:15mm; }
+.section-divider .appendix-label { color:#1d5571; font-size:12pt; font-weight:bold; letter-spacing:1pt; }
+.section-divider h2 { font-size:26pt; margin:7mm 0; text-transform:uppercase; }
+.appendix-plan { display:block; max-width:100%; max-height:105mm; object-fit:contain; margin:3mm auto; }
+.muted { color:#5b6268; }
+</style>
+</head>
+<body>
+<section class="cover" id="section-cover">
+  <img class="cover-background" src="{{ cover_background_data_uri }}" alt="">
+  <div>
+    <div class="cover-company">
+      <div class="wordmark"><img class="company-logo" src="{{ company_logo_data_uri }}" alt="{{ company.company_name }} logo"><div class="company-name">{{ company.company_name }}</div></div>
+      <div class="company-contact">{% if company.address_line_1 %}{{ company.address_line_1 }}{% endif %}{% if company.address_line_2 %} · {{ company.address_line_2 }}{% endif %}<br>{% if company.phone %}Tel: {{ company.phone }}{% endif %}{% if company.email %} · {{ company.email }}{% endif %}<br>{% if company.website %}{{ company.website }}{% endif %}</div>
+    </div>
+    <div class="cover-title"><h1>CCTV Survey Report</h1></div>
+    <table class="cover-meta"><tbody>
+      <tr><td>Client</td><td>:</td><td>{{ project.client_name or "Not provided" }}</td></tr>
+      <tr><td>Location</td><td>:</td><td>{{ project.location or "Not provided" }}</td></tr>
+      <tr><td>Report Date</td><td>:</td><td>{{ project.report_date.strftime("%d/%m/%Y") if project.report_date else "Not provided" }}</td></tr>
+      <tr><td>TV Ref.</td><td>:</td><td>{{ project.tv_reference_no or "Not provided" }}</td></tr>
+      <tr><td>Project</td><td>:</td><td>{{ project.project_name }} ({{ project.project_code }})</td></tr>
+      <tr><td>Date of Survey</td><td>:</td><td>{{ project.survey_start_date.strftime("%d %b %Y") if project.survey_start_date else "Not provided" }}{% if project.survey_end_date and project.survey_end_date != project.survey_start_date %} – {{ project.survey_end_date.strftime("%d %b %Y") }}{% endif %}</td></tr>
+    </tbody></table>
+  </div>
+  <div class="cover-footer">{{ company.company_name }}{% if company.address_line_1 %} · {{ company.address_line_1 }}{% endif %} · CCTV Survey Report</div>
+</section>
+<div class="running-header"><span>CCTV Survey at {{ project.location or "Not provided" }}</span><span>{{ project.tv_reference_no or "Not provided" }}</span></div>
+<div class="running-footer"><span>{{ company.company_name }} · {{ project.project_code }}</span><span>Generated {{ generated_on }}</span></div>
+
+<section class="section" id="section-eusr-certificate">
+  <h1 class="section-title">EUSR Certificate</h1>
+  <div class="certificate">
+    <h2>Employee Certification</h2>
+    <p>This certificate information is recorded for the project survey personnel.</p>
+    <div class="certificate-number">EUSR Certificate No.: {{ project.eusr_certificate_no or "Not provided" }}</div>
+    <p>{{ project.project_manager_name or "Project Manager" }}</p>
+    <p class="statement-copy">{{ fixed_sections.get("statement", {}).get("content", "Statement of Conformity content has not been configured for this report template.") }}</p>
+  </div>
+</section>
+
+<section class="section" id="section-contents">
+  <h1 class="contents-title">Contents</h1>
+  <ol class="toc">{% for item in toc %}<li><span class="toc-num">{{ loop.index if loop.index < 8 else "" }}</span><a href="#section-{{ item.code }}">{{ item.title }}</a></li>{% endfor %}</ol>
+</section>
+
+<section class="section" id="section-introduction">
+  <h1 class="section-title">{{ fixed_sections.get("introduction", {}).get("title", "1) Introduction") }}</h1>
+  <div class="intro-copy">{{ fixed_sections.get("introduction", {}).get("content", "Introduction content has not been configured for this report template.") }}</div>
+  <h1 class="section-title" id="section-method-statement">{{ fixed_sections.get("method", {}).get("title", "2) Method Statement") }}</h1>
+  <div class="method-copy">{{ fixed_sections.get("method", {}).get("content", "Method Statement content has not been configured for this report template.") }}</div>
+</section>
+
+<section class="section" id="section-summary">
+  <h1 class="section-title">3) Summary of Pipelines Condition and Site Environment</h1>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Remarks</th><th>Defects</th><th>Recommendation</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
+  {% for pipe in pipe_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material_code }}<br>{{ pipe.material }}</td><td>{{ pipe.remarks }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="11">No pipe sections have been imported from a WinCan VX report.</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="small">Total pipe sections: {{ pipe_count }} · Total surveyed length: {{ total_length }} m</div>
+  <div class="grade-notes">
+    <p>Grade 3: Best practice suggests consideration should be given to maintenance activities in the medium term.</p>
+    <p>Grade 4: Best practice suggests consideration should be given to maintenance activity to avoid potential blockages.</p>
+    <p>Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding.</p>
+  </div>
+</section>
+
+<section class="section" id="section-recommendations">
+  <h1 class="section-title">4) Summary of Defective Drainage Recommendation</h1>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Defects</th><th>Recommended Work</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
+  {% for pipe in pipe_rows if pipe.defects != "Not provided" or pipe.recommendation != "Not provided" %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="7">No defective drainage recommendations were identified in the imported WinCan VX report.</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="material-title">Material Types</div>
+  <table class="material-table"><tbody>
+    <tr><td class="code">VC</td><td class="equals">=</td><td>Vitrified Clay</td><td class="code">DI</td><td class="equals">=</td><td>Ductile Iron</td></tr>
+    <tr><td class="code">CI</td><td class="equals">=</td><td>Cast Iron</td><td class="code">CO</td><td class="equals">=</td><td>Concrete</td></tr>
+    <tr><td class="code">PVC</td><td class="equals">=</td><td>Polyvinyl chloride</td><td class="code">PE</td><td class="equals">=</td><td>Polyethylene</td></tr>
+  </tbody></table>
+</section>
+
+<section class="section" id="section-conclusion">
+  <h1 class="section-title">5) Conclusion</h1>
+  <div class="conclusion-copy">
+    <p>Between {{ project.survey_start_date.strftime("%d/%m/%Y") if project.survey_start_date else "Not provided" }} and {{ project.survey_end_date.strftime("%d/%m/%Y") if project.survey_end_date else (project.survey_start_date.strftime("%d/%m/%Y") if project.survey_start_date else "Not provided") }}{% if project.survey_start_date %} ({{ project.survey_start_date.strftime("%B %Y") }}{% if project.survey_end_date and project.survey_end_date.strftime("%B %Y") != project.survey_start_date.strftime("%B %Y") %} – {{ project.survey_end_date.strftime("%B %Y") }}{% endif %}){% endif %}, we completed the CCTV survey and pipe cleaning for {{ pipe_count }} pipe sections totaling {{ total_length }} m at {{ project.location or "Not provided" }}.</p>
+    {% if recommendation_groups %}<p>Based on the inspection results, the following defects were observed in certain sections: {{ defect_summary }}. To ensure the proper operation of the drainage system, the following rehabilitation works are recommended for the affected pipe sections:</p>{% else %}<p>Based on the inspection results, no defects requiring the listed rehabilitation works were identified in the imported WinCan report.</p>{% endif %}
+    {% for group in recommendation_groups %}<p>{{ group.title }}: A total of {{ group.pipe_count }} pipe sections (Pipe ID: {{ group.pipe_ids }}) are recommended for {{ "mechanical cleaning to remove settled deposits and corrosion products" if group.title == "Mechanical Cleaning" else "CIPP rehabilitation due to cracks and joint displacement" }}.</p>{% endfor %}
+    <p>For detailed defect records and pipe locations, please refer to Sections 3 and 4 of this report.</p>
+  </div>
+</section>
+
+<section class="section" id="section-appendices"><div class="section-divider"><div class="appendix-label">CCTV SURVEY REPORT</div><h2>Appendices</h2><p>Appendix I — WinCan VX report summary<br>Appendix II — Site layout plan (if provided)</p>{% if site_plan_images %}<p class="small">Site layout plan: {{ site_plan_images[0].file_name }}</p><img class="appendix-plan" src="{{ site_plan_images[0].data_uri }}" alt="Site layout plan: {{ site_plan_images[0].file_name }}">{% else %}<p class="small muted">No Site Layout Plan image is linked to this project.</p>{% endif %}</div></section>
+</body>
+</html>
