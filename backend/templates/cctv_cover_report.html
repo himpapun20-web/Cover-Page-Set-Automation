@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CCTV Survey Report - {{ project.location or "Survey" }}</title>
+<style>
+@page { size:A4 portrait; margin:15mm; }
+@page cover { size:A4 portrait; margin:0; }
+@page tables { size:A4 landscape; margin:12mm; }
+* { box-sizing:border-box; }
+html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif; color:#111; font-size:9pt; }
+.cover { page:cover; position:relative; isolation:isolate; width:210mm; height:297mm; padding:15mm 14mm 9mm; display:flex; flex-direction:column; justify-content:space-between; }
+.cover-background { position:absolute; z-index:0; inset:0; width:100%; height:100%; object-fit:cover; }
+.cover > :not(.cover-background) { position:relative; z-index:1; }
+.brand { display:flex; align-items:center; gap:3mm; }
+.company-logo { width:43mm; height:25mm; object-fit:contain; }
+.company-name { max-width:76mm; font-size:16pt; line-height:1.04; font-weight:bold; text-transform:uppercase; }
+.company-details { margin-top:1mm; max-width:175mm; font-size:7.2pt; font-weight:bold; line-height:1.25; }
+.cover-title { margin:13mm 0 12mm; text-align:center; }
+.cover-title h1 { margin:0; font-size:18pt; text-decoration:underline; text-transform:uppercase; }
+.cover-meta { width:100%; margin:0; border-collapse:collapse; table-layout:fixed; font-size:17pt; font-weight:bold; }
+.cover-meta tr { height:25mm; }
+.cover-meta td { padding:2mm 0; vertical-align:top; }
+.cover-meta td:first-child { width:28%; }
+.cover-meta td:nth-child(2) { width:7%; text-align:center; }
+.cover-meta td:last-child { width:65%; }
+.cover-footer { text-align:center; font-size:7pt; font-weight:bold; line-height:1.35; }
+.certificate-page { position:relative; page-break-before:always; break-before:page; min-height:267mm; padding:10mm 12mm; }
+.corner { position:absolute; width:6mm; height:6mm; border-color:#777; border-style:solid; }
+.corner-tl { top:0; left:0; border-width:.4pt 0 0 .4pt; }
+.corner-tr { top:0; right:0; border-width:.4pt .4pt 0 0; }
+.corner-bl { bottom:0; left:0; border-width:0 0 .4pt .4pt; }
+.corner-br { bottom:0; right:0; border-width:0 .4pt .4pt 0; }
+.certificate-meta { width:100%; border-collapse:collapse; font-size:9pt; }
+.certificate-meta tr { height:26mm; }
+.certificate-meta td { vertical-align:middle; }
+.certificate-meta td:first-child { width:29%; }
+.certificate-meta td:nth-child(2) { width:5%; }
+.certificate-statement { margin-top:3mm; font-size:9pt; line-height:1.45; }
+.certificate-statement h2 { margin:0 0 1mm; font-size:10pt; font-weight:normal; text-decoration:underline; }
+.certificate-signature { position:absolute; left:12mm; bottom:37mm; font-size:9pt; line-height:1.4; }
+.signature-line { width:58mm; height:20mm; margin-top:16mm; border-bottom:.6pt solid #111; }
+.certificate-number { position:absolute; left:12mm; bottom:11mm; font-size:9pt; font-weight:bold; }
+.table-pages { page:tables; page-break-before:always; break-before:page; }
+.section-title { margin:0 0 4mm; font-size:13pt; text-transform:uppercase; }
+.data-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7pt; margin:3mm 0 6mm; }
+.data-table th, .data-table td { border:.5pt solid #333; padding:1.4mm 1mm; vertical-align:top; overflow-wrap:anywhere; }
+.data-table th { background:#eee; text-align:center; }
+.grade-notes { margin-top:3mm; font-size:7.5pt; }
+.grade-notes p { margin:1mm 0; }
+.material-title { margin:4mm 0 1mm; font-size:8pt; font-weight:bold; }
+.material-table { width:100%; max-width:140mm; border-collapse:collapse; font-size:8pt; }
+.material-table td { padding:.5mm 2mm; vertical-align:top; }
+.material-table .code { width:14mm; font-weight:bold; }
+.material-table .equals { width:8mm; text-align:center; }
+</style>
+</head>
+<body>
+<section class="cover" id="section-cover">
+  <img class="cover-background" src="{{ cover_background_data_uri }}" alt="">
+  <div>
+    <div class="brand">
+      <img class="company-logo" src="{{ company_logo_data_uri }}" alt="{{ company.company_name }} logo">
+      <div class="company-name">{{ company.company_name }}</div>
+    </div>
+    <div class="company-details">
+      {{ company.address_line_1 or "Office address not provided" }} | {{ company.address_line_2 or "Mailing address not provided" }}<br>
+      Tel: {{ company.phone or "Not provided" }} | Fax: {{ company.fax or "Not provided" }} | Email: {{ company.email or "Not provided" }}
+    </div>
+    <div class="cover-title"><h1>CCTV Survey Report</h1></div>
+    <table class="cover-meta"><tbody>
+      <tr><td>Client</td><td>:</td><td>{{ project.client_name or "Not provided" }}</td></tr>
+      <tr><td>Location</td><td>:</td><td>{{ project.location or "Not provided" }}</td></tr>
+      <tr><td>Report Date</td><td>:</td><td>{{ project.report_date.strftime("%d/%m/%Y") if project.report_date else "Not provided" }}</td></tr>
+      <tr><td>TV Ref.</td><td>:</td><td>{{ project.contractor_job_reference or project.tv_reference_no or "Not provided" }}</td></tr>
+    </tbody></table>
+  </div>
+  <div class="cover-footer">
+    {{ company.address_line_1 or "Office address not provided" }}<br>
+    Tel: {{ company.phone or "Not provided" }} | Email: {{ company.email or "Not provided" }} | Fax: {{ company.fax or "Not provided" }}
+  </div>
+</section>
+
+<section class="certificate-page" id="section-certificate">
+  <span class="corner corner-tl"></span><span class="corner corner-tr"></span>
+  <span class="corner corner-bl"></span><span class="corner corner-br"></span>
+  <table class="certificate-meta"><tbody>
+    <tr><td>Client</td><td>:</td><td>{{ project.client_name or "Not provided" }}</td></tr>
+    <tr><td>Location</td><td>:</td><td>{{ project.location or "Not provided" }}</td></tr>
+    <tr><td>Date of Survey</td><td>:</td><td>{{ project.survey_start_date.strftime("%d %b %Y") if project.survey_start_date else "Not provided" }}{% if project.survey_end_date and project.survey_end_date != project.survey_start_date %} &amp; {{ project.survey_end_date.strftime("%d %b %Y") }}{% endif %}</td></tr>
+  </tbody></table>
+  <div class="certificate-statement">
+    <h2>Statement of Conformity</h2>
+    <div>{{ fixed_sections.get("statement", {}).get("content", "Statement of Conformity content has not been configured for this report template.") }}</div>
+  </div>
+  <div class="certificate-signature">
+    <div>For and on behalf of<br>{{ company.company_name }}</div>
+    <div class="signature-line"></div>
+    <div>{{ project.project_manager_name or "Mr. Wong Kwok Kwong" }}</div>
+  </div>
+  <div class="certificate-number">EUSR Certificate No.: {{ project.eusr_certificate_no or "Not provided" }}</div>
+</section>
+
+<section class="table-pages" id="section-summary">
+  <h1 class="section-title">Summary of Pipelines Condition and Site Environment</h1>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Remarks</th><th>Defects</th><th>Recommendation</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
+  {% for pipe in pipe_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material_code }}<br>{{ pipe.material }}</td><td>{{ pipe.remarks }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="11">No pipe sections have been imported from a WinCan VX report.</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="grade-notes">
+    <p>Grade 3: Best practice suggests consideration should be given to maintenance activities in the medium term.</p>
+    <p>Grade 4: Best practice suggests consideration should be given to maintenance activity to avoid potential blockages.</p>
+    <p>Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding.</p>
+  </div>
+  <h2 class="section-title" style="margin-top:7mm">Summary of Defective Drainage Recommendation</h2>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Defects</th><th>Recommended Work</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
+  {% for pipe in pipe_rows if pipe.defects != "Not provided" or pipe.recommendation != "Not provided" %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="7">No defective drainage recommendations were identified in the imported WinCan VX report.</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="material-title">Material Types</div>
+  <table class="material-table"><tbody>
+    <tr><td class="code">VC</td><td class="equals">=</td><td>Vitrified Clay</td><td class="code">DI</td><td class="equals">=</td><td>Ductile Iron</td></tr>
+    <tr><td class="code">CI</td><td class="equals">=</td><td>Cast Iron</td><td class="code">CO</td><td class="equals">=</td><td>Concrete</td></tr>
+    <tr><td class="code">PVC</td><td class="equals">=</td><td>Polyvinyl chloride</td><td class="code">PE</td><td class="equals">=</td><td>Polyethylene</td></tr>
+  </tbody></table>
+</section>
+</body>
+</html>
