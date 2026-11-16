@@ -13,4 +13,6 @@ WeasyPrint==70.0
 python-multipart==0.0.20
 Pillow==11.2.1
 pypdf==5.4.0
+pypdfium2==4.30.0
+pytesseract==0.3.13
 pytest==8.3.5
