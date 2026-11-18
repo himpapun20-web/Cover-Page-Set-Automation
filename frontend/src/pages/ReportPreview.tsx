@@ -37,10 +37,9 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
     setError('');
     setNotice('');
     try {
-      const preview = await api.previewWincanReport(projectId, file);
-      const result = await api.applyWincanReport(projectId, preview.rows);
+      const result = await api.uploadWincanReport(projectId, file);
       setFileName(file.name);
-      setNotice(`Imported and saved ${result.count} pipe section${result.count === 1 ? '' : 's'} from ${preview.page_count} PDF pages (${result.created} new, ${result.updated} updated). The HTML and PDF reports now use the imported data.`);
+      setNotice(`Imported and saved ${result.count} pipe section${result.count === 1 ? '' : 's'} from ${result.page_count} PDF pages (${result.created} new, ${result.updated} updated). The HTML and PDF reports now use the imported data.`);
       setIframeKey((value) => value + 1);
       setRefreshKey((value) => value + 1);
     } catch (e) {
