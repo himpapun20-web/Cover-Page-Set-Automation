@@ -28,10 +28,13 @@ RUN apt-get update \
         libopenjp2-7 \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
+        tesseract-ocr \
+        tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt \
+    && python -c "import pypdfium2, pytesseract; assert 'eng' in pytesseract.get_languages(config=''); print('Tesseract OCR ready')"
 COPY backend/app ./backend/app
 COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
