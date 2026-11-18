@@ -23,6 +23,7 @@ export type WinCanPipeRow = {
   recommendation: string | null;
 };
 export type WinCanPreview = { page_count: number; rows: WinCanPipeRow[]; text_preview: string };
+export type WinCanImportResult = { page_count: number; count: number; created: number; updated: number };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -56,6 +57,11 @@ export const api = {
     const body = new FormData();
     body.append('file', file);
     return request<WinCanPreview>(`/api/projects/${projectId}/wincan-report/preview`, { method: 'POST', body });
+  },
+  uploadWincanReport: (projectId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<WinCanImportResult>(`/api/projects/${projectId}/wincan-report/upload`, { method: 'POST', body });
   },
   applyWincanReport: (projectId: string, rows: WinCanPipeRow[]) => request<{ count: number; created: number; updated: number }>(`/api/projects/${projectId}/wincan-report`, { method: 'POST', body: JSON.stringify({ rows }) }),
   create: (resource: string, data: Record<string, unknown>) => request<Row>(`/api/${resource}`, { method: 'POST', body: JSON.stringify(data) }),
