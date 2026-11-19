@@ -13,7 +13,7 @@ export type WinCanPipeRow = {
   start_manhole: string | null;
   finish_manhole: string | null;
   function_description: string | null;
-  survey_length_m: string;
+  survey_length_m: string | null;
   pipe_size_mm: string | null;
   pipe_material_code: string | null;
   condition_grade: string | null;
@@ -22,8 +22,14 @@ export type WinCanPipeRow = {
   remarks: string | null;
   recommendation: string | null;
 };
-export type WinCanPreview = { page_count: number; rows: WinCanPipeRow[]; text_preview: string };
-export type WinCanImportResult = { page_count: number; count: number; created: number; updated: number };
+export type WinCanPreview = {
+  source_type: 'pdf' | 'xlsx';
+  page_count?: number;
+  sheet_count?: number;
+  rows: WinCanPipeRow[];
+  text_preview: string;
+};
+export type WinCanImportResult = { page_count?: number; sheet_count?: number; count: number; created: number; updated: number };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
