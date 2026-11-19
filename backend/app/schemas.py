@@ -103,7 +103,7 @@ class WinCanPipeRowInput(InputModel):
     finish_manhole: str | None = Field(default=None, max_length=100)
     function_code: str | None = Field(default=None, max_length=20)
     function_description: str | None = Field(default=None, max_length=100)
-    survey_length_m: Decimal = Field(ge=0, le=100000)
+    survey_length_m: Decimal | None = Field(default=None, ge=0, le=100000)
     pipe_size_mm: Decimal | None = Field(default=None, gt=0, le=100000)
     pipe_material_code: str | None = Field(default=None, max_length=50)
     condition_grade: Decimal | None = Field(default=None, ge=0, le=5)
