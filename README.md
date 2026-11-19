@@ -1,6 +1,6 @@
 # CCTV Survey Report Automation — VS Code Export
 
-A standalone, data-driven CCTV engineering-report generator. It creates a concise report from project details and reviewed pipe data imported from WinCan VX PDF reports.
+A standalone, data-driven CCTV engineering-report generator. It creates a concise report from project details and pipe data automatically imported from WinCan VX PDF reports.
 
 ## Local-only authentication
 
@@ -22,13 +22,13 @@ The app currently supports one company per deployment and does not provide compl
 - PostgreSQL-compatible schema, migrations and idempotent synthetic seed data.
 - Project dashboard with project, imported pipe-section and report status.
 - Responsive evergreen survey-workbench interface with a branded secure entry screen, clear navigation, readable data tables and accessible mobile controls.
-- Upload and review selectable-text WinCan VX PDF reports. Extracted pipe IDs, lengths, condition grades, materials, defects, site environment and recommendations can be corrected before saving.
-- Imported pipe data populates the pipeline condition/site environment and defective-drainage recommendation tables, plus a project-based conclusion with dates, location, total sections and length.
-- The generated report is limited to the cover, EUSR certificate, contents, introduction/method statement, condition/environment summary, defective-drainage recommendations, conclusion and appendices.
-- Scanned/image-only WinCan PDFs are not supported; the report must contain selectable text.
-- A real Site Layout Plan image upload for Appendix I. No missing plan is replaced with an invented drawing.
+- Upload WinCan VX PDF reports for automatic pipe-row extraction and saving; matching pipe IDs are updated and new sections are added without a manual review step.
+- Scanned/image-only WinCan PDFs are processed with English OCR using Tesseract; selectable-text PDFs use their embedded text.
+- Imported pipe data populates the pipeline condition/site environment and defective-drainage recommendation tables in the HTML preview and PDF.
+- The generated PDF contains a designed cover, a statement-of-conformity/EUSR page, the two imported WinCan summary tables, and a data-driven conclusion based only on imported pipe records.
+- Multipipe Renovation Limited is the seeded default company, with its office/mailing addresses and contact details.
 - English A4 report preview and PDF, including the requested grade guidance and material-type legend.
-- Fixed Statement of Conformity and Method Statement text are editable in report-content records; variable client, project and contractor fields come from the selected project's saved records.
+- Statement of Conformity text is stored in report-content records; client, location, survey dates and references come from the selected project's saved records.
 
 ## Supported filename format
 
@@ -52,16 +52,10 @@ For `2026-8-28^29`, the inspection date is 28 August 2026 and the range end is 2
 
 ## Report sequence
 
-1. Cover Page
-2. Statement of Conformity
-3. Contents
-4. Introduction
-5. Method Statement
-6. Summary of Pipelines Condition & Site Environment
-7. Appendices divider
-8. Appendix I — Site Layout Plan
-9. Appendix II — CCTV Survey Report: Project Information; Survey Overview; Section Summary; Detailed Section Report; Defect Summary; Section Profile; Scoring Summary; Survey Status and Uncertainty Notes
-10. Appendix III — Photographic Sheet: per-inspection distance/timeline and event details, followed by Section Pictures pages with repeatable Item No., Inspection Direction, PLR, Client's Job Ref and Contractor's Job Ref metadata.
+1. Cover page with company contact details and project client/location/report date/TV reference.
+2. Statement of Conformity and EUSR certificate details.
+3. Summary of Pipelines Condition and Site Environment.
+4. Summary of Defective Drainage Recommendation.
 
 The supplied Lamma report guides the implementation's target of 90–100% layout similarity and fixed wording only. Its client name, location, dates, pipe records, site plan and CCTV photographs are not copied into user reports. Any missing site plan or frame is identified as not provided; no synthetic image is presented as field evidence.
 
@@ -125,9 +119,8 @@ The computer must remain on and connected to the internet. This app is designed 
 ## Create a report from a WinCan VX report
 
 1. Create a project and enter its client, project/report dates, location, TV reference and any available job/contractor references.
-2. Open **Generate project report** for that project and upload a selectable-text WinCan VX PDF. Review and correct the extracted rows, then save them to the project. The imported pipe IDs and lengths drive the report totals and the defects/recommendations populate the summary tables.
-3. Optionally upload a real PNG, JPEG or WebP Site Layout Plan image (maximum 25 MiB) in the project's Appendix I area.
-4. Review the English report preview and select **Generate / download PDF**.
+2. Open **Generate project report** for that project and upload a WinCan VX PDF. Extracted rows are saved automatically; scanned reports use OCR. Matching pipe IDs are updated, and new pipe sections are added.
+3. Review the HTML preview and select **Generate / download PDF**. The report includes the designed cover/certificate pages and the two WinCan summary tables.
 
 ## Configuration and API
 
@@ -146,4 +139,4 @@ corepack pnpm build
 pyright --project pyrightconfig.json backend/app backend/tests
 ```
 
-The integration tests cover WinCan PDF parsing, reviewed pipe-data imports, project-driven report content, removed video/defect-entry routes, Site Layout Plan image rendering and PDF output.
+The integration tests cover WinCan PDF parsing and OCR fallback, automatic pipe-data imports, project-driven cover/certificate content, removed video/defect-entry routes and PDF output.
