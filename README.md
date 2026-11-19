@@ -22,7 +22,8 @@ The app currently supports one company per deployment and does not provide compl
 - PostgreSQL-compatible schema, migrations and idempotent synthetic seed data.
 - Project dashboard with project, imported pipe-section and report status.
 - Responsive evergreen survey-workbench interface with a branded secure entry screen, clear navigation, readable data tables and accessible mobile controls.
-- Upload WinCan VX PDF reports for automatic pipe-row extraction and saving; matching pipe IDs are updated and new sections are added without a manual review step.
+- Upload WinCan VX PDF or `.xlsx` reports for automatic pipe-row extraction and saving; matching pipe sections are updated and new sections are added without a manual review step. The Excel importer supports both flat pipe tables and repeated WinCan section-summary blocks, including observation codes and chainages. Scanned PDFs and spreadsheet values embedded as images use OCR; unrecognized PDF text is shown for troubleshooting. Values missing from the source remain blank in the report.
+- Section-summary Excel imports apply the configured project grades (attached deposits Grade 4, surface damage Grade 2, open joint Grade 1). The re-lining table includes joint displacement, fracture, holes and surface damage; continuous start/finish observations are combined into a chainage range.
 - Scanned/image-only WinCan PDFs are processed with English OCR using Tesseract; selectable-text PDFs use their embedded text.
 - Imported pipe data populates the pipeline condition/site environment and defective-drainage recommendation tables in the HTML preview and PDF.
 - The generated PDF contains a designed cover, a statement-of-conformity/EUSR page, the two imported WinCan summary tables, and a data-driven conclusion based only on imported pipe records.
@@ -119,7 +120,7 @@ The computer must remain on and connected to the internet. This app is designed 
 ## Create a report from a WinCan VX report
 
 1. Create a project and enter its client, project/report dates, location, TV reference and any available job/contractor references.
-2. Open **Generate project report** for that project and upload a WinCan VX PDF. Extracted rows are saved automatically; scanned reports use OCR. Matching pipe IDs are updated, and new pipe sections are added.
+2. Open **Generate project report** for that project and upload a WinCan VX PDF or `.xlsx` workbook. Scanned PDFs use OCR. Matching pipe sections are updated, and new sections are added.
 3. Review the HTML preview and select **Generate / download PDF**. The report includes the designed cover/certificate pages and the two WinCan summary tables.
 
 ## Configuration and API
