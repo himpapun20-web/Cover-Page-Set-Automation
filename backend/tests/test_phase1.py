@@ -244,6 +244,8 @@ def test_report_contains_reference_copy_english_order_and_pdf(client, db: Sessio
     assert "Contents</h1>" not in html and "Introduction" not in html and "Appendices" not in html
     assert "Summary of Pipelines Condition and Site Environment" in html
     assert "Summary of Defective Drainage Recommendation" in html
+    assert "5) Conclusion" in html
+    assert "No WinCan pipe sections have been imported" in html
     assert "Grade 3: Best practice suggests consideration should be given to maintenance activities in the medium term." in html
     assert "Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding." in html
     assert "Material Types" in html and "Vitrified Clay" in html and "Ductile Iron" in html
@@ -327,6 +329,14 @@ No.   Type   PLR    Upstream Node   Downstream Node   Road   Town   Use   Mat   
     assert "Settled deposits and longitudinal cracks" in report_html
     assert "Clean and rehabilitate" in report_html
     assert "01 Oct 2026" in report_html and "31 Oct 2026" in report_html
+    assert "Between 01/10/2026 and 31/10/2026 (October 2026)" in report_html
+    assert "1 pipe section totaling 25.6 m at Test Location" in report_html
+    assert "Mechanical Cleaning:" in report_html and "Pipe ID: P-100" in report_html
+    assert "CIPP Rehabilitation:" in report_html and "due to cracks" in report_html
+    pdf = render_report_pdf(db, project["id"])
+    pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
+    assert "5) CONCLUSION" in pdf_text
+    assert "Mechanical Cleaning" in pdf_text and "CIPP Rehabilitation" in pdf_text
 
 
 def test_scanned_wincan_pdf_uses_ocr(monkeypatch):
@@ -380,6 +390,21 @@ Recommendation: Repair
     assert "AUTO-01" in report_html
     assert "18.5" in report_html
     assert "Silt observed" in report_html
+
+
+def test_wincan_upload_returns_clear_error_when_no_rows_are_extracted(client, identities, monkeypatch):
+    project = _create_project(client, identities, code="WINCAN-EMPTY-001", project_name="Unrecognized WinCan Table")
+    monkeypatch.setattr("app.main.extract_wincan_pdf", lambda payload: ("unrecognized OCR text", 1))
+
+    response = client.post(
+        f"/api/projects/{project['id']}/wincan-report/upload",
+        files={"file": ("wincan.pdf", b"%PDF-1.7", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "No pipe sections could be extracted. Check the WinCan PDF scan and table layout; no pipe data was saved."
+    )
 
 
 def test_wincan_pdf_preview_rejects_invalid_pdf_and_extracts_text(client, identities, db: Session):
