@@ -16,6 +16,7 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeKey, setIframeKey] = useState(0);
   const [fileName, setFileName] = useState('');
+  const [ocrTextPreview, setOcrTextPreview] = useState('');
 
   async function loadSummary() {
     if (!projectId) return;
@@ -36,10 +37,21 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
     setImporting(true);
     setError('');
     setNotice('');
+    setOcrTextPreview('');
     try {
-      const result = await api.uploadWincanReport(projectId, file);
+      const preview = await api.previewWincanReport(projectId, file);
+      if (preview.rows.length === 0) {
+        setOcrTextPreview(preview.text_preview);
+        setError('No pipe sections could be extracted. Review the recognized text below; no pipe data was saved.');
+        return;
+      }
+      const result = await api.applyWincanReport(projectId, preview.rows);
       setFileName(file.name);
-      setNotice(`Imported and saved ${result.count} pipe section${result.count === 1 ? '' : 's'} from ${result.page_count} PDF pages (${result.created} new, ${result.updated} updated). The HTML and PDF reports now use the imported data.`);
+      setOcrTextPreview('');
+      const sourceDescription = preview.source_type === 'pdf'
+        ? `${preview.page_count ?? 0} PDF pages`
+        : `${preview.sheet_count ?? 0} Excel worksheet${preview.sheet_count === 1 ? '' : 's'}`;
+      setNotice(`Imported and saved ${result.count} pipe section${result.count === 1 ? '' : 's'} from ${sourceDescription} (${result.created} new, ${result.updated} updated). The HTML and PDF reports now use the imported data.`);
       setIframeKey((value) => value + 1);
       setRefreshKey((value) => value + 1);
     } catch (e) {
@@ -58,11 +70,16 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
 
   return <div className="page-stack report-preview-page">
     <section className="page-heading">
-      <div><div className="eyebrow">PROJECT REPORT / WINCAN VX IMPORT</div><h1>Generate project report</h1><p>Upload a WinCan VX PDF to automatically extract and save its pipe rows into the HTML preview and PDF.</p></div>
+      <div><div className="eyebrow">PROJECT REPORT / WINCAN VX IMPORT</div><h1>Generate project report</h1><p>Upload a WinCan VX PDF or .xlsx workbook to automatically extract and save its pipe rows into the HTML preview and PDF.</p></div>
       <div className="heading-actions"><Link className="button button-quiet" to="/"><ArrowLeft size={15} /> Dashboard</Link><button className="button button-quiet" onClick={refreshReport} disabled={loading}><RefreshCw size={15} /> Refresh report</button>{canGenerate ? <a className="button button-primary" href={pdfUrl}><Download size={15} /> Generate / download PDF</a> : <span className="status-pill">PDF generation requires a Project Manager</span>}</div>
     </section>
     {error && <div className="alert alert-error">{error}{error.includes('Sign in') && <a href="/api/auth/login"> Sign in</a>}</div>}
     {notice && <div className="alert alert-success">{notice}</div>}
+    {ocrTextPreview && <details className="panel">
+      <summary>Recognized PDF text for troubleshooting</summary>
+      <p className="muted">Copy this text and share it to help diagnose why the pipe table was not recognized. It is shown only in this page and is not saved.</p>
+      <pre style={{ maxHeight: 320, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{ocrTextPreview}</pre>
+    </details>}
     {loading ? <div className="empty-state">Loading project data…</div> : project && <>
       <section className="panel report-project-card">
         <div className="panel-heading"><div><div className="eyebrow">{shown(project.project_code)}</div><h2>{shown(project.project_name)}</h2><p>{shown(project.client_name)} · {shown(project.location)} · Survey dates: {shown(project.survey_start_date)} – {shown(project.survey_end_date)}</p></div><span className={`status-pill status-${String(project.report_status || '').toLowerCase()}`}>{shown(project.report_status).replaceAll('_', ' ')}</span></div>
@@ -73,15 +90,15 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
         </div>
       </section>
       <section className="panel batch-panel">
-        <div className="panel-heading"><div><div className="eyebrow">WINCAN VX / PDF IMPORT</div><h2>Upload and import report</h2><p>Pipe sections are extracted and saved automatically. Scanned PDFs are processed with OCR; no manual row entry or confirmation is needed.</p></div>
-          {canUpload && <label className="button button-primary"><Upload size={15} /> {importing ? 'Extracting and saving…' : 'Select WinCan PDF'}<input type="file" accept="application/pdf,.pdf" hidden disabled={importing} onChange={(event) => { void importReport(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>}
+        <div className="panel-heading"><div><div className="eyebrow">WINCAN VX / PDF AND EXCEL IMPORT</div><h2>Upload and import report</h2><p>Pipe sections are extracted and saved automatically. Scanned PDFs and spreadsheet values stored as images are processed with OCR; no manual row entry or confirmation is needed.</p></div>
+          {canUpload && <label className="button button-primary"><Upload size={15} /> {importing ? 'Extracting and saving…' : 'Select WinCan PDF or Excel'}<input type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden disabled={importing} onChange={(event) => { void importReport(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>}
         </div>
         {fileName && <p className="small">Last imported report: <strong>{fileName}</strong></p>}
-        {importing && <div className="empty-state">Extracting WinCan data (including OCR where needed) and saving the pipe sections…</div>}
-        {canUpload && !importing && <p className="muted">Uploading a report adds new pipe sections and updates matching pipe IDs in this project. The generated report reflects the saved data.</p>}
+        {importing && <div className="empty-state">Extracting WinCan data (including OCR for scanned PDFs) and saving the pipe sections…</div>}
+        {canUpload && !importing && <p className="muted">Uploading a report adds new pipe sections and updates matching pipe IDs in this project. Values missing from the source remain blank in the report.</p>}
       </section>
       <section className="panel report-preview-panel"><div className="panel-heading"><div><div className="eyebrow">HTML PREVIEW / PROJECT-SPECIFIC</div><h2>Preview the generated report</h2></div><a className="button button-quiet button-small" href={htmlUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open HTML</a></div><div className="report-frame"><iframe key={iframeKey} title="Project CCTV survey report HTML preview" src={htmlUrl} /></div></section>
-      <p className="footnote">The PDF contains the designed cover and certificate pages followed by the imported WinCan summary tables. No videos are uploaded or analyzed.</p>
+      <p className="footnote">The PDF contains the designed cover and certificate pages followed by the imported WinCan summary tables and conclusion. No videos are uploaded or analyzed.</p>
     </>}
   </div>;
 }
