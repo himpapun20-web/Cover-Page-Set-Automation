@@ -34,7 +34,7 @@ RUN apt-get update \
 
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt \
-    && python -c "import pypdfium2, pytesseract; assert 'eng' in pytesseract.get_languages(config=''); print('Tesseract OCR ready')"
+    && python -c "import openpyxl, pypdfium2, pytesseract; assert 'eng' in pytesseract.get_languages(config=''); print('Excel and Tesseract OCR ready')"
 COPY backend/app ./backend/app
 COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
