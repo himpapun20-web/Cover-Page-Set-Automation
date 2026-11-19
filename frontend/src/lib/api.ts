@@ -37,7 +37,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...init, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: response.statusText }));
-    const message = Array.isArray(payload.detail) ? payload.detail.map((item: { msg?: string }) => item.msg).join('; ') : payload.detail;
+    const message = Array.isArray(payload.detail)
+      ? payload.detail.map((item: { loc?: Array<string | number>; msg?: string }) => {
+        const location = item.loc?.filter((part) => part !== 'body').join('.');
+        return location ? `${location}: ${item.msg}` : item.msg;
+      }).join('; ')
+      : payload.detail;
     throw new Error(String(message || `HTTP ${response.status}`));
   }
   if (response.status === 204) return undefined as T;
@@ -69,8 +74,3 @@ export const api = {
     body.append('file', file);
     return request<WinCanImportResult>(`/api/projects/${projectId}/wincan-report/upload`, { method: 'POST', body });
   },
-  applyWincanReport: (projectId: string, rows: WinCanPipeRow[]) => request<{ count: number; created: number; updated: number }>(`/api/projects/${projectId}/wincan-report`, { method: 'POST', body: JSON.stringify({ rows }) }),
-  create: (resource: string, data: Record<string, unknown>) => request<Row>(`/api/${resource}`, { method: 'POST', body: JSON.stringify(data) }),
-  update: (resource: string, id: string, data: Record<string, unknown>) => request<Row>(`/api/${resource}/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  remove: (resource: string, id: string) => request<void>(`/api/${resource}/${id}`, { method: 'DELETE' }),
-};
