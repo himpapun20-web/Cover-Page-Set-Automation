@@ -19,7 +19,7 @@ from .models import Asset, Company, PipeSection, Project, User
 from .reports import render_report_html, render_report_pdf
 from .schemas import INPUT_SCHEMAS, WinCanPipeRowInput, WinCanReportInput
 from .survey_api import router as survey_router
-from .wincan_report import extract_wincan_pdf, parse_wincan_pipe_rows
+from .wincan_report import extract_wincan_pdf, parse_wincan_pipe_rows, parse_wincan_xlsx
 
 app = FastAPI(title="CCTV Survey Report Automation API", version="0.1.0", description="CCTV survey records, Dashboard and project-specific report generation API")
 app.include_router(auth_router)
@@ -125,17 +125,27 @@ for resource, resource_model in MODEL_MAP.items():
 def preview_wincan_report(project_id: UUID, file: UploadFile = File(...), db: Session = Depends(get_db), _user: User = Depends(require_roles(*READ_ROLES))):
     if not db.get(Project, project_id):
         raise HTTPException(404, "The requested project was not found.")
-    if Path(file.filename or "").suffix.lower() != ".pdf":
-        raise HTTPException(415, "Upload a WinCan VX report in PDF format.")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".pdf", ".xlsx"}:
+        raise HTTPException(415, "Upload a WinCan VX report in PDF or .xlsx format.")
     payload = file.file.read(30 * 1024 * 1024 + 1)
     try:
-        text, page_count = extract_wincan_pdf(payload)
+        if suffix == ".pdf":
+            text, page_count = extract_wincan_pdf(payload)
+            return {
+                "source_type": "pdf",
+                "page_count": page_count,
+                "rows": parse_wincan_pipe_rows(text),
+                "text_preview": text[:6000],
+            }
+        rows, sheet_count = parse_wincan_xlsx(payload)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {
-        "page_count": page_count,
-        "rows": parse_wincan_pipe_rows(text),
-        "text_preview": text[:6000],
+        "source_type": "xlsx",
+        "sheet_count": sheet_count,
+        "rows": rows,
+        "text_preview": "",
     }
 
 
@@ -197,22 +207,28 @@ def _save_wincan_rows(project_id: UUID, rows: list[WinCanPipeRowInput], db: Sess
 def upload_wincan_report(project_id: UUID, file: UploadFile = File(...), db: Session = Depends(get_db), _user: User = Depends(require_roles("ADMIN", "PROJECT_MANAGER", "OPERATOR"))):
     if not db.get(Project, project_id):
         raise HTTPException(404, "The requested project was not found.")
-    if Path(file.filename or "").suffix.lower() != ".pdf":
-        raise HTTPException(415, "Upload a WinCan VX report in PDF format.")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".pdf", ".xlsx"}:
+        raise HTTPException(415, "Upload a WinCan VX report in PDF or .xlsx format.")
     payload = file.file.read(30 * 1024 * 1024 + 1)
     try:
-        text, page_count = extract_wincan_pdf(payload)
+        if suffix == ".pdf":
+            text, page_count = extract_wincan_pdf(payload)
+            parsed_rows = parse_wincan_pipe_rows(text)
+        else:
+            parsed_rows, sheet_count = parse_wincan_xlsx(payload)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    parsed_rows = parse_wincan_pipe_rows(text)
     if not parsed_rows:
-        raise HTTPException(422, "No pipe sections could be extracted. Check the WinCan PDF scan and table layout; no pipe data was saved.")
+        source_name = "WinCan PDF scan and table layout" if suffix == ".pdf" else "Excel worksheet and table layout"
+        raise HTTPException(422, f"No pipe sections could be extracted. Check the {source_name}; no pipe data was saved.")
     try:
         report = WinCanReportInput.model_validate({"rows": parsed_rows})
     except ValidationError as exc:
         raise HTTPException(422, detail=exc.errors(include_url=False)) from exc
     result = _save_wincan_rows(project_id, report.rows, db)
-    return {"page_count": page_count, **result}
+    source_info = {"page_count": page_count} if suffix == ".pdf" else {"sheet_count": sheet_count}
+    return {**source_info, **result}
 
 
 @app.post("/api/projects/{project_id}/wincan-report")
