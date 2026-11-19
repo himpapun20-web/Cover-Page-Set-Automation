@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from io import BytesIO
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from collections import defaultdict
 from zipfile import BadZipFile
@@ -41,6 +42,27 @@ LABELS = {
     for field, aliases in FIELD_ALIASES.items()
     for alias in aliases
 }
+SECTION_FIELD_LABELS = {
+    "plr": "pipe_id",
+    "inspection direction": "inspection_direction",
+    "inspected length": "inspected_length",
+    "total length": "total_length",
+    "upstream node": "start_manhole",
+    "downstream node": "finish_manhole",
+    "dia/height": "pipe_size_mm",
+    "material": "pipe_material_code",
+}
+SECTION_FIELD_PATTERN = re.compile(
+    r"(PLR|Inspection Direction|Inspected Length|Total Length|Upstream Node|"
+    r"Downstream Node|Dia/Height|Material)\s*:",
+    re.IGNORECASE,
+)
+DEFECT_GRADES = {
+    "attached_deposits": 4,
+    "surface_damage": 2,
+    "open_joint": 1,
+}
+RELINING_DEFECT_TYPES = {"joint_displacement", "fracture", "hole", "surface_damage"}
 
 
 def extract_wincan_pdf(payload: bytes) -> tuple[str, int]:
@@ -207,6 +229,199 @@ def _ocr_excel_image(image: Any) -> str:
         raise ValueError("An embedded image in the Excel workbook could not be processed.") from exc
 
 
+def _expand_section_values(fields: list[str], values: list[str]) -> list[str]:
+    expanded = list(values)
+    if len(expanded) < len(fields):
+        for index, field in enumerate(fields[:-1]):
+            if field == "start_manhole" and fields[index + 1] == "finish_manhole" and index < len(expanded):
+                parts = expanded[index].split()
+                if len(parts) == 2:
+                    expanded[index:index + 1] = parts
+                    break
+    if len(expanded) < len(fields):
+        for index, field in enumerate(fields[:-1]):
+            if field == "pipe_size_mm" and fields[index + 1] == "pipe_material_code" and index < len(expanded):
+                match = re.match(r"^(\d+(?:[.,]\d+)?\s*mm)\s+(.+)$", expanded[index], re.IGNORECASE)
+                if match:
+                    expanded[index:index + 1] = [match.group(1), match.group(2)]
+                    break
+    return expanded
+
+
+def _section_header_fields(values: tuple[Any, ...]) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for column, cell in enumerate(values):
+        if not isinstance(cell, str):
+            continue
+        matches = list(SECTION_FIELD_PATTERN.finditer(cell))
+        if not matches:
+            continue
+
+        labels: list[str] = []
+        inline_values: list[str] = []
+        for index, match in enumerate(matches):
+            label = re.sub(r"\s+", " ", match.group(1).casefold())
+            labels.append(SECTION_FIELD_LABELS[label])
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(cell)
+            segment = cell[match.end():end]
+            inline_values.append(segment.splitlines()[0].strip(" \t/") if segment else "")
+
+        if any(not value for value in inline_values):
+            for candidate in values[column + 1:]:
+                if candidate is None or not _text(candidate):
+                    continue
+                candidate_text = str(candidate)
+                if SECTION_FIELD_PATTERN.search(candidate_text):
+                    continue
+                lines = [line.strip() for line in candidate_text.splitlines() if line.strip()]
+                expanded = _expand_section_values(labels, lines)
+                if len(expanded) == len(labels):
+                    inline_values = [
+                        value or expanded[index]
+                        for index, value in enumerate(inline_values)
+                    ]
+                    break
+
+        for field, value in zip(labels, inline_values):
+            if value:
+                fields[field] = value
+    return fields
+
+
+def _defect_type(description: str) -> str | None:
+    normalized = description.casefold()
+    if "attached deposit" in normalized or "attatched deposit" in normalized:
+        return "attached_deposits"
+    if "surface damage" in normalized:
+        return "surface_damage"
+    if "joint displacement" in normalized or "displaced joint" in normalized:
+        return "joint_displacement"
+    if "open joint" in normalized:
+        return "open_joint"
+    if "fracture" in normalized or "fractured" in normalized:
+        return "fracture"
+    if re.search(r"\bholes?\b", normalized):
+        return "hole"
+    return None
+
+
+def _chainage_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        return f"{Decimal(str(value)):.2f}"
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _summarize_section_defects(
+    observations: list[tuple[Any, str, str]],
+) -> tuple[str | None, str | None, bool]:
+    summaries: list[tuple[int, str]] = []
+    pending: dict[tuple[str, str], list[tuple[int, Any, str]]] = defaultdict(list)
+    grades: list[int] = []
+    requires_relining = False
+
+    def format_observation(index: int, description: str, kind: str, location: str | None) -> None:
+        nonlocal requires_relining
+        grade = DEFECT_GRADES.get(kind)
+        if grade is not None:
+            grades.append(grade)
+        if kind in RELINING_DEFECT_TYPES:
+            requires_relining = True
+        summary = f"{description} {location}".strip()
+        if grade is not None:
+            summary += f" (Grade {grade})"
+        summaries.append((index, summary))
+
+    for index, (chainage, _code, description) in enumerate(observations):
+        kind = _defect_type(description)
+        if kind is None:
+            continue
+        suffix = re.search(r"(?:,\s*|\s+)(start|finish)\s*$", description, re.IGNORECASE)
+        base_description = description[:suffix.start()].rstrip(" ,") if suffix else description
+        if suffix:
+            key = (kind, base_description.casefold())
+            if suffix.group(1).casefold() == "start":
+                pending[key].append((index, chainage, base_description))
+                continue
+            if pending[key]:
+                start_index, start_chainage, paired_description = pending[key].pop(0)
+                start_text = _chainage_text(start_chainage)
+                finish_text = _chainage_text(chainage)
+                location = (
+                    f"from {start_text}m to {finish_text}m"
+                    if start_text is not None and finish_text is not None
+                    else None
+                )
+                format_observation(start_index, paired_description, kind, location)
+                continue
+
+        chainage_label = _chainage_text(chainage)
+        location = f"at {chainage_label}m" if chainage_label is not None else None
+        format_observation(index, base_description, kind, location)
+
+    for (kind, _), starts in pending.items():
+        for index, chainage, description in starts:
+            chainage_label = _chainage_text(chainage)
+            location = f"at {chainage_label}m" if chainage_label is not None else None
+            format_observation(index, description, kind, location)
+
+    summaries.sort(key=lambda item: item[0])
+    grade = str(max(grades)) if grades else None
+    return "; ".join(summary for _, summary in summaries) or None, grade, requires_relining
+
+
+def _parse_wincan_section_summary(
+    values_by_row: list[tuple[Any, ...]],
+) -> list[dict[str, str | None]]:
+    sections: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for values in values_by_row:
+        header_fields = _section_header_fields(values)
+        if header_fields.get("pipe_id"):
+            if current:
+                sections.append(current)
+            current = {"fields": {}, "observations": []}
+        if current is None:
+            continue
+        current["fields"].update(header_fields)
+        if (
+            len(values) >= 4
+            and isinstance(values[0], (int, float))
+            and not isinstance(values[0], bool)
+            and isinstance(values[2], str)
+            and values[3] is not None
+        ):
+            current["observations"].append((values[1], values[2].strip(), str(values[3]).strip()))
+    if current:
+        sections.append(current)
+
+    rows: list[dict[str, str | None]] = []
+    for section in sections:
+        fields = section["fields"]
+        if not fields.get("pipe_id"):
+            continue
+        defects, grade, requires_relining = _summarize_section_defects(section["observations"])
+        normalized = _normalize_row({
+            "pipe_id": fields.get("pipe_id"),
+            "start_manhole": fields.get("start_manhole"),
+            "finish_manhole": fields.get("finish_manhole"),
+            "survey_length_m": fields.get("inspected_length") or fields.get("total_length"),
+            "pipe_size_mm": fields.get("pipe_size_mm"),
+            "pipe_material_code": fields.get("pipe_material_code"),
+            "function_description": None,
+            "condition_grade": grade,
+            "defects_summary": defects,
+            "remarks": None,
+            "site_environment": None,
+            "recommendation": "Re-lining" if requires_relining else None,
+        }, allow_missing_length=True)
+        if normalized:
+            rows.append(normalized)
+    return rows
+
+
 def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]:
     if len(payload) > MAX_WINCAN_XLSX_BYTES:
         raise ValueError("The WinCan Excel file exceeds the 30 MiB upload limit.")
@@ -232,6 +447,19 @@ def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]
                 raise ValueError(f"Worksheet '{worksheet.title}' exceeds the 200-column limit.")
 
             values_by_row = list(worksheet.iter_rows(values_only=True))
+            section_summary_layout = any(
+                "section summary" in _text(value).casefold()
+                for values in values_by_row
+                for value in values
+            )
+            if section_summary_layout:
+                section_rows = _parse_wincan_section_summary(values_by_row)
+                if not section_rows:
+                    raise ValueError("The WinCan section-summary layout was found, but no pipe sections could be extracted.")
+                rows.extend(section_rows)
+                found_pipe_table = True
+                continue
+
             headers_by_row: dict[int, dict[str, int]] = {}
             image_field_columns: dict[int, str] = {}
             for row_number, values in enumerate(values_by_row, start=1):
