@@ -110,14 +110,17 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
   {% for pipe in pipe_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material_code }}<br>{{ pipe.material }}</td><td>{{ pipe.remarks }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="11">No pipe sections have been imported from a WinCan VX report.</td></tr>{% endfor %}
   </tbody></table>
   <div class="grade-notes">
-    <p>Grade 3: Best practice suggests consideration should be given to maintenance activities in the medium term.</p>
-    <p>Grade 4: Best practice suggests consideration should be given to maintenance activity to avoid potential blockages.</p>
-    <p>Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding.</p>
+    <p>Grade 4: Attached deposits.</p>
+    <p>Grade 2: Surface damage.</p>
+    <p>Grade 1: Open joint.</p>
   </div>
-  <h2 class="section-title" style="margin-top:7mm">4) Summary of Defective Drainage Recommendation</h2>
-  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Defects</th><th>Recommended Work</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
-  {% for pipe in pipe_rows if pipe.defects != "Not provided" or pipe.recommendation != "Not provided" %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="7">No defective drainage recommendations were identified in the imported WinCan VX report.</td></tr>{% endfor %}
+  <div class="eyebrow" style="margin-top:7mm">Summary of Defective Drainage Recommendation</div>
+  <h2 class="section-title">4.2 {{ relining_count }} nos. of pipeline sections needed to be rehabilitated by <strong><u>Re-lining Method</u></strong></h2>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function (S = Surface Water; F = Foul Water)</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Defects</th></tr></thead><tbody>
+  {% for pipe in relining_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material }}</td><td>{{ pipe.defects }}</td></tr>{% else %}<tr>{% for _ in range(8) %}<td>N/A</td>{% endfor %}</tr>{% endfor %}
+  <tr><td colspan="4">Estimated Length of repair</td><td>{{ relining_total_length }}</td><td colspan="3"><strong><u>Re-lining Method</u></strong></td></tr>
   </tbody></table>
+  {% if relining_missing_length_count %}<p class="muted">A total length could not be calculated because {{ relining_missing_length_count }} re-lining section(s) have no recorded survey length.</p>{% endif %}
   <div class="material-title">Material Types</div>
   <table class="material-table"><tbody>
     <tr><td class="code">VC</td><td class="equals">=</td><td>Vitrified Clay</td><td class="code">DI</td><td class="equals">=</td><td>Ductile Iron</td></tr>
@@ -127,7 +130,7 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
   <section class="conclusion" id="section-conclusion">
     <h2>5) Conclusion</h2>
     {% if conclusion.section_count %}
-    <p>{{ conclusion.survey_period }}, we completed the CCTV survey and pipe cleaning for {{ conclusion.section_count }} pipe section{{ "s" if conclusion.section_count != 1 else "" }} totaling {{ conclusion.total_length }} m at {{ conclusion.location }}.</p>
+    <p>{{ conclusion.survey_period }}, we completed the CCTV survey and pipe cleaning for {{ conclusion.section_count }} pipe section{{ "s" if conclusion.section_count != 1 else "" }}{% if conclusion.missing_length_count %}, with {{ conclusion.total_length }} m of recorded pipe lengths; length was not provided for {{ conclusion.missing_length_count }} section{{ "s" if conclusion.missing_length_count != 1 else "" }}{% else %} totaling {{ conclusion.total_length }} m{% endif %} at {{ conclusion.location }}.</p>
     {% if conclusion.defect_descriptions %}
     <p>Based on the inspection results, the following defect descriptions were recorded in the imported WinCan data: {{ conclusion.defect_descriptions | join("; ") }}.</p>
     {% else %}
@@ -140,7 +143,10 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
     {% if conclusion.cipp_count %}
     <p><strong>CIPP Rehabilitation:</strong> A total of {{ conclusion.cipp_count }} pipe section{{ "s" if conclusion.cipp_count != 1 else "" }} (Pipe ID: {{ conclusion.cipp_pipe_ids }}) {{ "are" if conclusion.cipp_count != 1 else "is" }} recommended for CIPP rehabilitation due to {{ conclusion.cipp_reasons | join(" and ") }}.</p>
     {% endif %}
-    {% if not conclusion.cleaning_count and not conclusion.cipp_count %}
+    {% if conclusion.relining_count %}
+    <p><strong>Re-lining:</strong> A total of {{ conclusion.relining_count }} pipe section{{ "s" if conclusion.relining_count != 1 else "" }} (Pipe ID: {{ conclusion.relining_pipe_ids }}) {{ "are" if conclusion.relining_count != 1 else "is" }} recommended for re-lining.</p>
+    {% endif %}
+    {% if not conclusion.cleaning_count and not conclusion.cipp_count and not conclusion.relining_count %}
     <p>No mechanical-cleaning or CIPP recommendations were identified in the imported defect descriptions.</p>
     {% endif %}
     {% else %}
