@@ -37,6 +37,76 @@ def value(value: Any, fallback: str = "Not provided") -> str:
     return str(value)
 
 
+def _survey_period(start: date | None, end: date | None) -> str:
+    if start and end:
+        start_label = value(start)
+        end_label = value(end)
+        if start.year == end.year and start.month == end.month:
+            month_year = start.strftime("%B %Y")
+        elif start.year == end.year:
+            month_year = f"{start.strftime('%B')}–{end.strftime('%B %Y')}"
+        else:
+            month_year = f"{start.strftime('%B %Y')}–{end.strftime('%B %Y')}"
+        return f"Between {start_label} and {end_label} ({month_year})"
+    if start:
+        return f"Starting {value(start)} ({start.strftime('%B %Y')})"
+    if end:
+        return f"Ending {value(end)} ({end.strftime('%B %Y')})"
+    return "During the survey period (dates not provided)"
+
+
+def _unique_pipe_ids(pipes: list[PipeSection]) -> str:
+    identifiers: list[str] = []
+    seen: set[str] = set()
+    for pipe in pipes:
+        key = pipe.pipe_id.casefold()
+        if key not in seen:
+            identifiers.append(pipe.pipe_id)
+            seen.add(key)
+    return ", ".join(identifiers)
+
+
+def _unique_phrases(phrases: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for phrase in phrases:
+        cleaned = phrase.strip()
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            unique.append(cleaned)
+            seen.add(key)
+    return unique
+
+
+def _cleaning_reasons(defect_texts: list[str]) -> list[str]:
+    text = " ".join(defect_texts).casefold()
+    reasons: list[str] = []
+    if "settled deposit" in text:
+        reasons.append("settled deposits")
+    if "attached deposit" in text or "attatched deposit" in text:
+        reasons.append("attached deposits")
+    if "corrosion product" in text:
+        reasons.append("corrosion products")
+    return reasons
+
+
+def _cipp_reasons(defect_texts: list[str]) -> list[str]:
+    text = " ".join(defect_texts).casefold()
+    reasons: list[str] = []
+    if "crack" in text:
+        reasons.append("cracks")
+    if "fracture" in text:
+        reasons.append("fractures")
+    if "broken" in text:
+        reasons.append("broken sections")
+    if "joint" in text:
+        if "displaced joint" in text or "joint displacement" in text:
+            reasons.append("joint displacement")
+        else:
+            reasons.append("joint defects")
+    return reasons
+
+
 def _company_logo_data_uri() -> str:
     payload = (TEMPLATE_DIR / "company-logo.png").read_bytes()
     return f"data:image/png;base64,{base64.b64encode(payload).decode('ascii')}"
@@ -84,6 +154,21 @@ def report_context(db: Session, project_id: str) -> dict[str, Any]:
 
     pipe_rows: list[dict[str, Any]] = []
     report_pipes = [pipe for pipe in project.pipe_sections if pipe.wincan_report_imported]
+    defect_texts = _unique_phrases([
+        pipe.defects_summary for pipe in report_pipes if pipe.defects_summary
+    ])
+    cleaning_pipes = [
+        pipe for pipe in report_pipes
+        if pipe.defects_summary and _cleaning_reasons([pipe.defects_summary])
+    ]
+    cipp_pipes = [
+        pipe for pipe in report_pipes
+        if pipe.defects_summary and _cipp_reasons([pipe.defects_summary])
+    ]
+    total_length = sum(
+        (pipe.survey_length_m for pipe in report_pipes if pipe.survey_length_m is not None),
+        Decimal("0"),
+    )
     for pipe in sorted(report_pipes, key=lambda item: (item.pipe_id, item.section_reference)):
         pipe_rows.append({
             "pipe_id": pipe.pipe_id,
@@ -110,6 +195,23 @@ def report_context(db: Session, project_id: str) -> dict[str, Any]:
         "fixed_sections": fixed_sections,
         "pipe_rows": pipe_rows,
         "pipe_count": len(pipe_rows),
+        "conclusion": {
+            "survey_period": _survey_period(project.survey_start_date, project.survey_end_date),
+            "section_count": len(report_pipes),
+            "total_length": value(total_length),
+            "location": project.location or "Not provided",
+            "defect_descriptions": defect_texts,
+            "cleaning_count": len(cleaning_pipes),
+            "cleaning_pipe_ids": _unique_pipe_ids(cleaning_pipes),
+            "cleaning_reasons": _cleaning_reasons([
+                pipe.defects_summary for pipe in cleaning_pipes if pipe.defects_summary
+            ]),
+            "cipp_count": len(cipp_pipes),
+            "cipp_pipe_ids": _unique_pipe_ids(cipp_pipes),
+            "cipp_reasons": _cipp_reasons([
+                pipe.defects_summary for pipe in cipp_pipes if pipe.defects_summary
+            ]),
+        },
     }
 
 
