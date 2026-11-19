@@ -74,3 +74,8 @@ export const api = {
     body.append('file', file);
     return request<WinCanImportResult>(`/api/projects/${projectId}/wincan-report/upload`, { method: 'POST', body });
   },
+  applyWincanReport: (projectId: string, rows: WinCanPipeRow[]) => request<{ count: number; created: number; updated: number }>(`/api/projects/${projectId}/wincan-report`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  create: (resource: string, data: Record<string, unknown>) => request<Row>(`/api/${resource}`, { method: 'POST', body: JSON.stringify(data) }),
+  update: (resource: string, id: string, data: Record<string, unknown>) => request<Row>(`/api/${resource}/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  remove: (resource: string, id: string) => request<void>(`/api/${resource}/${id}`, { method: 'DELETE' }),
+};
