@@ -246,8 +246,9 @@ def test_report_contains_reference_copy_english_order_and_pdf(client, db: Sessio
     assert "Summary of Defective Drainage Recommendation" in html
     assert "5) Conclusion" in html
     assert "No WinCan pipe sections have been imported" in html
-    assert "Grade 3: Best practice suggests consideration should be given to maintenance activities in the medium term." in html
-    assert "Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding." in html
+    assert "Grade 4: Attached deposits." in html
+    assert "Grade 2: Surface damage." in html
+    assert "Grade 1: Open joint." in html
     assert "Material Types" in html and "Vitrified Clay" in html and "Ductile Iron" in html
     assert not re.search(r"[\u4e00-\u9fff]", html)
     pdf = render_report_pdf(db, ids["project_id"])
@@ -337,6 +338,135 @@ No.   Type   PLR    Upstream Node   Downstream Node   Road   Town   Use   Mat   
     pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
     assert "5) CONCLUSION" in pdf_text
     assert "Mechanical Cleaning" in pdf_text and "CIPP Rehabilitation" in pdf_text
+
+
+def test_wincan_xlsx_preview_and_upload_preserve_missing_values(client, identities):
+    from openpyxl import Workbook
+
+    project = _create_project(client, identities, code="WINCAN-XLSX-001", project_name="Excel WinCan Import")
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Pipe Summary"
+    headers = ["PLR", "Upstream Node", "Downstream Node", "Use", "Mat.", "Profile", "Length"]
+    worksheet.append(headers)
+    worksheet.append(["GNAX", "GNA", "RWSP-B2-02", "S", "DI", "Circular 350mm", "18.73 m"])
+    worksheet.append(["GNAX", "GNA", "CPSP-B2-03", "S", "DI", "Circular 100mm", None])
+    worksheet.append(headers)
+    worksheet.append(["GNAX", "GNA", "WSP-B2-03", "F", "VC", "Circular 200mm", 10.5])
+    payload = BytesIO()
+    workbook.save(payload)
+    excel_bytes = payload.getvalue()
+
+    preview = client.post(
+        f"/api/projects/{project['id']}/wincan-report/preview",
+        files={"file": ("wincan.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["source_type"] == "xlsx"
+    assert preview.json()["sheet_count"] == 1
+    assert len(preview.json()["rows"]) == 3
+    assert preview.json()["rows"][0]["function_description"] == "Surface Water"
+    assert preview.json()["rows"][0]["pipe_material_code"] == "DI"
+    assert preview.json()["rows"][1]["survey_length_m"] is None
+    assert preview.json()["rows"][0]["section_reference"] != preview.json()["rows"][1]["section_reference"]
+
+    uploaded = client.post(
+        f"/api/projects/{project['id']}/wincan-report/upload",
+        files={"file": ("wincan.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json() == {"sheet_count": 1, "count": 3, "created": 3, "updated": 0}
+    report_html = client.get(f"/api/projects/{project['id']}/report.html").text
+    assert "<td>N/A</td>" in report_html
+    assert "Estimated Length of repair" in report_html and "0.00" in report_html
+    assert "length was not provided for 1 section" in report_html
+    assert "10.5" in report_html and "Not provided" in report_html
+
+
+def test_wincan_section_summary_xlsx_extracts_grades_and_relining_rows(client, identities):
+    from openpyxl import Workbook
+
+    project = _create_project(client, identities, code="WINCAN-SECTION-SUMMARY", project_name="Section Summary Import")
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Table 1"
+    worksheet.append(["Section Summary"])
+    worksheet.append([
+        "PLR: P-OPEN\nInspection Direction: Upstream\nInspected Length: 3.00 m\nTotal Length: 3.00 m",
+        None, None, None,
+        "Upstream Node: A\nDownstream Node: B\nDia/Height: 100 mm\nMaterial: Ductile Iron",
+    ])
+    worksheet.append(["No.", "m+", "Code", "Observation"])
+    worksheet.append([1, 0.0, "MH", "Start node"])
+    worksheet.append([2, 1.25, "OJM", "Open joint, medium"])
+    worksheet.append([3, 3.0, "MHF", "Finish node"])
+    worksheet.append(["PLR:", None, None, "P-DEZ", "Upstream Node:", "C"])
+    worksheet.append(["Inspection Direction:", None, None, "Upstream", "Downstream Node:", "D"])
+    worksheet.append(["Inspected Length:", None, None, "10.00 m", "Dia/Height:", "150 mm"])
+    worksheet.append(["Total Length:", None, None, "10.00 m", "Material:", "Concrete"])
+    worksheet.append(["No.", "m+", "Code", "Observation"])
+    worksheet.append([1, 0.0, "MH", "Start node"])
+    worksheet.append([2, 2.0, "DEZ", "Attached deposits, Hard Material, start"])
+    worksheet.append([3, 5.0, "DEZ", "Attached deposits, Hard Material, finish"])
+    worksheet.append([4, 10.0, "MHF", "Finish node"])
+    worksheet.append([
+        "PLR: / Inspection Direction: Inspected Length: Total Length:",
+        None, None, "P-REL\nUpstream\n4.50 m\n4.50 m",
+        "Upstream Node: Downstream Node: Dia/Height: / Material:",
+        "E\nF\n75 mm Ductile Iron",
+    ])
+    worksheet.append(["No.", "m+", "Code", "Observation"])
+    worksheet.append([1, 0.0, "MH", "Start node"])
+    worksheet.append([2, 0.5, "SS", "Surface damage, spalling from 7 o'clock to 10 o'clock"])
+    worksheet.append([3, 4.5, "MHF", "Finish node"])
+
+    payload = BytesIO()
+    workbook.save(payload)
+    response = client.post(
+        f"/api/projects/{project['id']}/wincan-report/upload",
+        files={"file": ("section-summary.xlsx", payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["count"] == 3
+
+    report_html = client.get(f"/api/projects/{project['id']}/report.html").text
+    assert "4.2 1 nos. of pipeline sections needed" in report_html
+    assert "Re-lining Method" in report_html
+    assert "P-REL" in report_html
+    assert "P-OPEN" not in report_html.split("4.2 1 nos.", 1)[1]
+    assert "Attached deposits, Hard Material from 2.00m to 5.00m (Grade 4)" in report_html
+    assert "Surface damage, spalling from 7 o&#39;clock to 10 o&#39;clock at 0.50m (Grade 2)" in report_html
+    assert "Open joint, medium at 1.25m (Grade 1)" in report_html
+    assert "Estimated Length of repair" in report_html
+    assert "4.50" in report_html
+    assert "Pipe replacement method" not in report_html
+
+
+def test_wincan_xlsx_uses_ocr_for_text_embedded_in_cells(monkeypatch):
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as SpreadsheetImage
+    import pytesseract
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(["PLR", "Upstream Node", "Downstream Node", "Profile", "Length"])
+    worksheet.merge_cells("E1:G1")
+    worksheet.append(["GNAX", "GNA", "RWSP-B2-02", "Circular 100mm", None, None, None])
+    image_bytes = BytesIO()
+    Image.new("RGB", (40, 16), "white").save(image_bytes, format="PNG")
+    image_bytes.seek(0)
+    worksheet.add_image(SpreadsheetImage(image_bytes), "F2")
+    payload = BytesIO()
+    workbook.save(payload)
+    monkeypatch.setattr(pytesseract, "image_to_string", lambda image, **kwargs: "12.5 m")
+
+    from app.wincan_report import parse_wincan_xlsx
+
+    rows, sheet_count = parse_wincan_xlsx(payload.getvalue())
+
+    assert sheet_count == 1
+    assert len(rows) == 1
+    assert rows[0]["survey_length_m"] == "12.5"
 
 
 def test_scanned_wincan_pdf_uses_ocr(monkeypatch):
