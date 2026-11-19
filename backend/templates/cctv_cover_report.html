@@ -48,6 +48,9 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
 .data-table th { background:#eee; text-align:center; }
 .grade-notes { margin-top:3mm; font-size:7.5pt; }
 .grade-notes p { margin:1mm 0; }
+.conclusion { margin-top:8mm; font-size:9pt; line-height:1.45; break-inside:avoid; page-break-inside:avoid; }
+.conclusion h2 { margin:0 0 3mm; font-size:13pt; text-transform:uppercase; }
+.conclusion p { margin:2mm 0; }
 .material-title { margin:4mm 0 1mm; font-size:8pt; font-weight:bold; }
 .material-table { width:100%; max-width:140mm; border-collapse:collapse; font-size:8pt; }
 .material-table td { padding:.5mm 2mm; vertical-align:top; }
@@ -102,7 +105,7 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
 </section>
 
 <section class="table-pages" id="section-summary">
-  <h1 class="section-title">Summary of Pipelines Condition and Site Environment</h1>
+  <h1 class="section-title">3) Summary of Pipelines Condition and Site Environment</h1>
   <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Remarks</th><th>Defects</th><th>Recommendation</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
   {% for pipe in pipe_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material_code }}<br>{{ pipe.material }}</td><td>{{ pipe.remarks }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="11">No pipe sections have been imported from a WinCan VX report.</td></tr>{% endfor %}
   </tbody></table>
@@ -111,7 +114,7 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
     <p>Grade 4: Best practice suggests consideration should be given to maintenance activity to avoid potential blockages.</p>
     <p>Grade 5: Best practice suggests that this pipe is at a high risk of backing up or causing flooding.</p>
   </div>
-  <h2 class="section-title" style="margin-top:7mm">Summary of Defective Drainage Recommendation</h2>
+  <h2 class="section-title" style="margin-top:7mm">4) Summary of Defective Drainage Recommendation</h2>
   <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Defects</th><th>Recommended Work</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
   {% for pipe in pipe_rows if pipe.defects != "Not provided" or pipe.recommendation != "Not provided" %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="7">No defective drainage recommendations were identified in the imported WinCan VX report.</td></tr>{% endfor %}
   </tbody></table>
@@ -121,6 +124,30 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
     <tr><td class="code">CI</td><td class="equals">=</td><td>Cast Iron</td><td class="code">CO</td><td class="equals">=</td><td>Concrete</td></tr>
     <tr><td class="code">PVC</td><td class="equals">=</td><td>Polyvinyl chloride</td><td class="code">PE</td><td class="equals">=</td><td>Polyethylene</td></tr>
   </tbody></table>
+  <section class="conclusion" id="section-conclusion">
+    <h2>5) Conclusion</h2>
+    {% if conclusion.section_count %}
+    <p>{{ conclusion.survey_period }}, we completed the CCTV survey and pipe cleaning for {{ conclusion.section_count }} pipe section{{ "s" if conclusion.section_count != 1 else "" }} totaling {{ conclusion.total_length }} m at {{ conclusion.location }}.</p>
+    {% if conclusion.defect_descriptions %}
+    <p>Based on the inspection results, the following defect descriptions were recorded in the imported WinCan data: {{ conclusion.defect_descriptions | join("; ") }}.</p>
+    {% else %}
+    <p>No defect descriptions were available in the imported WinCan data.</p>
+    {% endif %}
+    <p>To ensure the proper operation of the drainage system, the following rehabilitation works are recommended for the affected pipe sections:</p>
+    {% if conclusion.cleaning_count %}
+    <p><strong>Mechanical Cleaning:</strong> A total of {{ conclusion.cleaning_count }} pipe section{{ "s" if conclusion.cleaning_count != 1 else "" }} (Pipe ID: {{ conclusion.cleaning_pipe_ids }}) {{ "are" if conclusion.cleaning_count != 1 else "is" }} recommended for mechanical cleaning to address {{ conclusion.cleaning_reasons | join(" and ") }}.</p>
+    {% endif %}
+    {% if conclusion.cipp_count %}
+    <p><strong>CIPP Rehabilitation:</strong> A total of {{ conclusion.cipp_count }} pipe section{{ "s" if conclusion.cipp_count != 1 else "" }} (Pipe ID: {{ conclusion.cipp_pipe_ids }}) {{ "are" if conclusion.cipp_count != 1 else "is" }} recommended for CIPP rehabilitation due to {{ conclusion.cipp_reasons | join(" and ") }}.</p>
+    {% endif %}
+    {% if not conclusion.cleaning_count and not conclusion.cipp_count %}
+    <p>No mechanical-cleaning or CIPP recommendations were identified in the imported defect descriptions.</p>
+    {% endif %}
+    {% else %}
+    <p>No WinCan pipe sections have been imported, so the survey pipe count, total length, defects, and related recommendations cannot be summarized from the available data.</p>
+    {% endif %}
+    <p>For detailed defect records and pipe locations, please refer to Sections 3 and 4 of this report.</p>
+  </section>
 </section>
 </body>
 </html>
