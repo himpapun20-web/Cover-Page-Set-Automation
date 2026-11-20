@@ -449,6 +449,62 @@ def test_wincan_section_summary_xlsx_extracts_grades_and_relining_rows(client, i
     assert "Pipe replacement method" not in report_html
 
 
+def test_full_wincan_xlsx_extracts_spreadsheet_observations_and_inspection_metadata(
+    client, identities, monkeypatch
+):
+    from openpyxl import Workbook
+
+    project = _create_project(client, identities, code="WINCAN-FULL-REPORT", project_name="Full WinCan Report")
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Table 1"
+    worksheet.cell(1, 1, "Section Summary")
+    worksheet.cell(
+        2, 1,
+        "PLR: P-100\nInspection Direction: Upstream\nInspected Length: 10.00 m\nTotal Length: 10.00 m",
+    )
+    worksheet.cell(2, 27, "Upstream Node: A\nDownstream Node: B\nDia/Height: 100 mm\nMaterial: Ductile Iron")
+    for column, heading in ((1, "No."), (3, "m+"), (9, "Code"), (13, "Observation")):
+        worksheet.cell(3, column, heading)
+    for row_number, number, chainage, code, description in (
+        (4, 1, 0.0, "WL", "Water level, 5% of the vertical dimension"),
+        (5, 2, 2.5, "SS", "Surface damage, spalling"),
+        (6, 3, 10.0, "MHF", "Finish node, manhole, reference: B"),
+    ):
+        worksheet.cell(row_number, 1, number)
+        worksheet.cell(row_number, 3, chainage)
+        worksheet.cell(row_number, 9, code)
+        worksheet.cell(row_number, 13, description)
+
+    worksheet.cell(8, 1, "Section Inspection - 2026/10/28 - P-100")
+    worksheet.cell(9, 19, "Inspection Direction: Upstream Inspected Length: 10.00 m Total Length: 10.00 m")
+    worksheet.cell(9, 33, "Upstream Node: A\nDownstream Node: B")
+    worksheet.cell(10, 1, "Use: Surface water\nType of Pipe:")
+    worksheet.cell(11, 23, "STR Grade")
+    worksheet.cell(11, 48, "SER Grade")
+    worksheet.cell(12, 23, 1)
+    worksheet.cell(12, 48, 1)
+
+    payload = BytesIO()
+    workbook.save(payload)
+    monkeypatch.setattr("app.wincan_report.MAX_WINCAN_XLSX_READ_ONLY_BYTES", 0)
+    response = client.post(
+        f"/api/projects/{project['id']}/wincan-report/upload",
+        files={"file": ("full-wincan.xlsx", payload.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert response.status_code == 200, response.text
+    report_html = client.get(f"/api/projects/{project['id']}/report.html").text
+    assert "S (Surface Water)" in report_html
+    assert "Surface damage, spalling at 2.50m (Grade 2)" in report_html
+    assert "Inspection date: 28/10/2026" in report_html
+    assert "Inspection direction: Upstream" in report_html
+    assert "Water level, 5% of the vertical dimension at 0.00m" in report_html
+    assert "Flow conditions: N/A" in report_html
+    assert "Date of Survey" in report_html and "28 Oct 2026" in report_html
+    assert "Inspection / Environment" in report_html
+    assert "4.2 1 nos. of pipeline sections needed" in report_html
+
+
 def test_wincan_xlsx_uses_ocr_for_text_embedded_in_cells(monkeypatch):
     from openpyxl import Workbook
     from openpyxl.drawing.image import Image as SpreadsheetImage
