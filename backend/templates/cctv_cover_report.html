@@ -105,7 +105,7 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
 
 <section class="table-pages" id="section-summary">
   <h1 class="section-title">3) Summary of Pipelines Condition and Site Environment</h1>
-  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Remarks</th><th>Defects</th><th>Recommendation</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
+  <table class="data-table"><thead><tr><th>Pipe ID</th><th>Start MH</th><th>To MH</th><th>Function</th><th>Survey Length (m)</th><th>Pipe Size (mm)</th><th>Pipe Material</th><th>Inspection / Environment</th><th>Defects</th><th>Recommendation</th><th>Condition Grade (0–5)</th></tr></thead><tbody>
   {% for pipe in pipe_rows %}<tr><td>{{ pipe.pipe_id }}</td><td>{{ pipe.upstream_manhole }}</td><td>{{ pipe.downstream_manhole }}</td><td>{{ pipe.function }}</td><td>{{ pipe.length }}</td><td>{{ pipe.size }}</td><td>{{ pipe.material_code }}<br>{{ pipe.material }}</td><td>{{ pipe.remarks }}</td><td>{{ pipe.defects }}</td><td>{{ pipe.recommendation }}</td><td>{{ pipe.grade }}</td></tr>{% else %}<tr><td colspan="11">No pipe sections have been imported from a WinCan VX report.</td></tr>{% endfor %}
   </tbody></table>
   <div class="grade-notes">
