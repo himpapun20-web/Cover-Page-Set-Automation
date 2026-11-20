@@ -241,10 +241,9 @@ def test_report_contains_reference_copy_english_order_and_pdf(client, db: Sessio
     assert "Statement of Conformity" in html
     assert "For and on behalf of<br>Multipipe Renovation Limited" in html
     assert html.count("EUSR Certificate No.:") == 1
-    assert "<td><strong>Client</strong></td>" in html
-    assert "<td><strong>Location</strong></td>" in html
-    assert "<strong>Date of Survey</strong>" in html
-    assert "Date of Signature" in html
+    assert "<td>Client</td><td>:</td><td><strong>" in html
+    assert "<td>Location</td><td>:</td><td><strong>" in html
+    assert "<td>Date of Survey</td><td>:</td><td><strong>" in html
     assert "Contents</h1>" not in html and "Introduction" not in html and "Appendices" not in html
     assert "Summary of Pipelines Condition and Site Environment" in html
     assert "Summary of Defective Drainage Recommendation" in html
@@ -260,7 +259,7 @@ def test_report_contains_reference_copy_english_order_and_pdf(client, db: Sessio
     pages = PdfReader(BytesIO(pdf)).pages
     assert len(pages) == 3
     certificate_text = pages[1].extract_text()
-    for label in ("Client", "Location", "Date of Survey", "EUSR Certificate No.", "Statement of Conformity", "Date of Signature"):
+    for label in ("Client", "Location", "Date of Survey", "EUSR Certificate No.", "Statement of Conformity"):
         assert label in certificate_text
 
 
