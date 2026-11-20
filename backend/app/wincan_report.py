@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 from io import BytesIO
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, BinaryIO
 from collections import defaultdict
+from datetime import datetime
 from zipfile import BadZipFile
 
 from PIL import Image, ImageOps
@@ -18,7 +19,8 @@ from pypdf.errors import PdfReadError
 
 MAX_WINCAN_PDF_BYTES = 30 * 1024 * 1024
 MAX_WINCAN_PDF_PAGES = 500
-MAX_WINCAN_XLSX_BYTES = 30 * 1024 * 1024
+MAX_WINCAN_XLSX_BYTES = 200 * 1024 * 1024
+MAX_WINCAN_XLSX_READ_ONLY_BYTES = 30 * 1024 * 1024
 MAX_WINCAN_XLSX_SHEETS = 50
 MAX_WINCAN_XLSX_ROWS_PER_SHEET = 10000
 MAX_WINCAN_XLSX_IMAGES = 1000
@@ -159,6 +161,7 @@ def _normalize_row(row: dict[str, Any], allow_missing_length: bool = False) -> d
     return {
         "pipe_id": pipe_id[:100],
         "section_reference": section_reference[:100],
+        "inspection_date": _text(row.get("inspection_date")) or None,
         "start_manhole": start_manhole,
         "finish_manhole": finish_manhole,
         "function_description": function_description,
@@ -372,8 +375,116 @@ def _summarize_section_defects(
     return "; ".join(summary for _, summary in summaries) or None, grade, requires_relining
 
 
+def _section_environment_summary(observations: list[tuple[Any, str, str]]) -> str | None:
+    summaries: list[str] = []
+    flow_observations: list[str] = []
+    for chainage, code, description in observations:
+        chainage_text = _chainage_text(chainage)
+        if code.casefold() == "wl":
+            summary = description.strip()
+            if chainage_text and " at " not in summary.casefold():
+                summary = f"{summary} at {chainage_text}m"
+            summaries.append(summary)
+        elif code.casefold() == "gp":
+            summaries.append(
+                f"General photograph taken at {chainage_text}m"
+                if chainage_text else description.strip()
+            )
+        elif "flow" in description.casefold():
+            flow_observations.append(description.strip())
+    summaries.append(
+        "Flow conditions: " + ("; ".join(flow_observations) if flow_observations else "N/A")
+    )
+    return "; ".join(dict.fromkeys(summaries)) or None
+
+
+def _row_field_value(rows: list[tuple[Any, ...]], label: str) -> str | None:
+    pattern = re.compile(rf"^\s*{re.escape(label)}\s*:\s*(.*?)\s*$", re.IGNORECASE)
+    for row in rows:
+        for value in row:
+            if not isinstance(value, str):
+                continue
+            for line in value.splitlines():
+                match = pattern.match(line)
+                if match and match.group(1).strip():
+                    return match.group(1).strip()
+    return None
+
+
+def _parse_wincan_inspection_metadata(
+    values_by_row: list[tuple[Any, ...]],
+) -> list[dict[str, str | None]]:
+    records: list[dict[str, str | None]] = []
+    title_pattern = re.compile(
+        r"Section Inspection\s*-\s*(\d{4}/\d{1,2}/\d{1,2})\s*-\s*(\S+)",
+        re.IGNORECASE,
+    )
+    for index, row in enumerate(values_by_row):
+        title = next((value for value in row if isinstance(value, str) and "Section Inspection -" in value), None)
+        if not title:
+            continue
+        match = title_pattern.search(title)
+        if not match:
+            continue
+        try:
+            inspection_date = datetime.strptime(match.group(1), "%Y/%m/%d").strftime("%Y-%m-%d")
+        except ValueError:
+            inspection_date = None
+
+        detail_rows: list[tuple[Any, ...]] = []
+        for candidate in values_by_row[index + 1:index + 12]:
+            if any(
+                isinstance(value, str) and "Section Inspection -" in value
+                for value in candidate
+            ):
+                break
+            detail_rows.append(candidate)
+
+        direction = _row_field_value(detail_rows, "Inspection Direction")
+        direction_match = re.match(r"(Upstream|Downstream)", direction or "", re.IGNORECASE)
+        function = _row_field_value(detail_rows, "Use")
+        record = {
+            "inspection_date": inspection_date,
+            "inspection_direction": direction_match.group(1) if direction_match else direction,
+            "function_description": function,
+        }
+        for candidate_index, candidate in enumerate(values_by_row[index + 1:], start=index + 1):
+            if any(
+                isinstance(value, str) and "Section Inspection -" in value
+                for value in candidate
+            ):
+                break
+            grade_columns = {
+                column: _text(value).casefold()
+                for column, value in enumerate(candidate)
+                if isinstance(value, str) and _text(value)
+            }
+            grade_indexes = [
+                column for column, label in grade_columns.items()
+                if label in {"str grade", "ser grade"}
+            ]
+            if grade_indexes:
+                next_index = candidate_index + 1
+                if next_index < len(values_by_row):
+                    grade_values = [
+                        _clean_number(_text(values_by_row[next_index][column]))
+                        for column in grade_indexes
+                        if column < len(values_by_row[next_index])
+                    ]
+                    valid_grades = [
+                        Decimal(value) for value in grade_values
+                        if value is not None and Decimal(value) <= 5
+                    ]
+                    if valid_grades:
+                        record["condition_grade"] = str(max(valid_grades).normalize())
+                break
+        records.append(record)
+    return records
+
+
 def _parse_wincan_section_summary(
     values_by_row: list[tuple[Any, ...]],
+    inspection_metadata: list[dict[str, str | None]] | None = None,
 ) -> list[dict[str, str | None]]:
     sections: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
@@ -382,27 +493,64 @@ def _parse_wincan_section_summary(
         if header_fields.get("pipe_id"):
             if current:
                 sections.append(current)
-            current = {"fields": {}, "observations": []}
+            current = {"fields": {}, "observations": [], "observation_columns": {}}
         if current is None:
             continue
         current["fields"].update(header_fields)
+        observation_headers = {
+            _text(value).strip().casefold(): index
+            for index, value in enumerate(values)
+            if isinstance(value, str) and _text(value)
+        }
+        if {"no.", "m+", "code", "observation"}.issubset(observation_headers):
+            current["observation_columns"] = {
+                "number": observation_headers["no."],
+                "chainage": observation_headers["m+"],
+                "code": observation_headers["code"],
+                "description": observation_headers["observation"],
+            }
+        columns = current["observation_columns"]
         if (
-            len(values) >= 4
-            and isinstance(values[0], (int, float))
-            and not isinstance(values[0], bool)
-            and isinstance(values[2], str)
-            and values[3] is not None
+            columns
+            and columns["number"] < len(values)
+            and isinstance(values[columns["number"]], (int, float))
+            and not isinstance(values[columns["number"]], bool)
+            and columns["code"] < len(values)
+            and columns["description"] < len(values)
+            and isinstance(values[columns["code"]], str)
+            and values[columns["description"]] is not None
         ):
-            current["observations"].append((values[1], values[2].strip(), str(values[3]).strip()))
+            chainage = values[columns["chainage"]] if columns["chainage"] < len(values) else None
+            current["observations"].append((
+                chainage,
+                values[columns["code"]].strip(),
+                str(values[columns["description"]]).strip(),
+            ))
     if current:
         sections.append(current)
 
     rows: list[dict[str, str | None]] = []
-    for section in sections:
+    for section_index, section in enumerate(sections):
         fields = section["fields"]
         if not fields.get("pipe_id"):
             continue
-        defects, grade, requires_relining = _summarize_section_defects(section["observations"])
+        observations = section["observations"]
+        defects, grade, requires_relining = _summarize_section_defects(observations)
+        site_environment = _section_environment_summary(observations)
+        metadata = (
+            inspection_metadata[section_index]
+            if inspection_metadata and len(inspection_metadata) == len(sections)
+            else {}
+        )
+        inspection_details: list[str] = []
+        if metadata.get("inspection_date"):
+            display_date = datetime.strptime(metadata["inspection_date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            inspection_details.append(f"Inspection date: {display_date}")
+        if fields.get("inspection_direction") or metadata.get("inspection_direction"):
+            direction = fields.get("inspection_direction") or metadata.get("inspection_direction")
+            inspection_details.append(f"Inspection direction: {direction}")
+        if site_environment:
+            inspection_details.append(site_environment)
         normalized = _normalize_row({
             "pipe_id": fields.get("pipe_id"),
             "start_manhole": fields.get("start_manhole"),
@@ -410,27 +558,42 @@ def _parse_wincan_section_summary(
             "survey_length_m": fields.get("inspected_length") or fields.get("total_length"),
             "pipe_size_mm": fields.get("pipe_size_mm"),
             "pipe_material_code": fields.get("pipe_material_code"),
-            "function_description": None,
-            "condition_grade": grade,
+            "function_description": metadata.get("function_description"),
+            "inspection_date": metadata.get("inspection_date"),
+            "condition_grade": grade or metadata.get("condition_grade"),
             "defects_summary": defects,
-            "remarks": None,
-            "site_environment": None,
+            "remarks": "; ".join(inspection_details) or None,
+            "site_environment": site_environment,
             "recommendation": "Re-lining" if requires_relining else None,
         }, allow_missing_length=True)
         if normalized:
+            normalized["remarks"] = "; ".join(inspection_details) or normalized["site_environment"]
             rows.append(normalized)
     return rows
 
 
-def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]:
-    if len(payload) > MAX_WINCAN_XLSX_BYTES:
-        raise ValueError("The WinCan Excel file exceeds the 30 MiB upload limit.")
-    if not payload.startswith(b"PK"):
+def parse_wincan_xlsx(payload: bytes | BinaryIO) -> tuple[list[dict[str, str | None]], int]:
+    if isinstance(payload, bytes):
+        source: BinaryIO = BytesIO(payload)
+        file_size = len(payload)
+    else:
+        source = payload
+        try:
+            source.seek(0, 2)
+            file_size = source.tell()
+            source.seek(0)
+        except (OSError, AttributeError) as exc:
+            raise ValueError("The uploaded Excel workbook must be seekable.") from exc
+    if file_size > MAX_WINCAN_XLSX_BYTES:
+        raise ValueError("The WinCan Excel file exceeds the 200 MiB upload limit.")
+    if source.read(2) != b"PK":
         raise ValueError("The uploaded file is not a valid .xlsx workbook.")
+    source.seek(0)
+    read_only = file_size > MAX_WINCAN_XLSX_READ_ONLY_BYTES
 
     workbook = None
     try:
-        workbook = load_workbook(BytesIO(payload), read_only=False, data_only=True)
+        workbook = load_workbook(source, read_only=read_only, data_only=True)
         if not workbook.worksheets:
             raise ValueError("The Excel workbook does not contain any worksheets.")
         if len(workbook.worksheets) > MAX_WINCAN_XLSX_SHEETS:
@@ -453,7 +616,8 @@ def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]
                 for value in values
             )
             if section_summary_layout:
-                section_rows = _parse_wincan_section_summary(values_by_row)
+                inspection_metadata = _parse_wincan_inspection_metadata(values_by_row)
+                section_rows = _parse_wincan_section_summary(values_by_row, inspection_metadata)
                 if not section_rows:
                     raise ValueError("The WinCan section-summary layout was found, but no pipe sections could be extracted.")
                 rows.extend(section_rows)
@@ -474,7 +638,7 @@ def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]
                     continue
                 headers_by_row[row_number - 1] = fields
                 for field, index in fields.items():
-                    merge = next((
+                    merge = None if read_only else next((
                         cell_range for cell_range in worksheet.merged_cells.ranges
                         if cell_range.min_row <= row_number <= cell_range.max_row
                         and cell_range.min_col <= index + 1 <= cell_range.max_col
@@ -485,10 +649,11 @@ def parse_wincan_xlsx(payload: bytes) -> tuple[list[dict[str, str | None]], int]
                     else:
                         image_field_columns[index] = field
 
-            if len(worksheet._images) > MAX_WINCAN_XLSX_IMAGES:
+            worksheet_images = [] if read_only else worksheet._images
+            if len(worksheet_images) > MAX_WINCAN_XLSX_IMAGES:
                 raise ValueError(f"Worksheet '{worksheet.title}' exceeds the {MAX_WINCAN_XLSX_IMAGES}-image limit.")
             images_by_row_field: dict[int, dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
-            for image in worksheet._images:
+            for image in worksheet_images:
                 anchor = getattr(image.anchor, "_from", None)
                 if anchor is None:
                     continue
