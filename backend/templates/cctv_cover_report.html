@@ -6,6 +6,7 @@
 <style>
 @page { size:A4 portrait; margin:15mm; }
 @page cover { size:A4 portrait; margin:0; }
+@page certificate { size:A4 portrait; margin:0; }
 @page tables { size:A4 landscape; margin:12mm; }
 * { box-sizing:border-box; }
 html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif; color:#111; font-size:9pt; }
@@ -25,25 +26,22 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
 .cover-meta td:nth-child(2) { width:7%; text-align:center; }
 .cover-meta td:last-child { width:65%; }
 .cover-footer { text-align:center; font-size:7pt; font-weight:bold; line-height:1.35; }
-.certificate-page { position:relative; page-break-before:always; break-before:page; height:267mm; padding:9mm 12mm; display:flex; flex-direction:column; }
+.certificate-page { page:certificate; position:relative; page-break-before:always; break-before:page; width:210mm; height:297mm; padding:13mm 8mm 10mm; overflow:hidden; }
 .corner { position:absolute; width:6mm; height:6mm; border-color:#777; border-style:solid; }
 .corner-tl { top:0; left:0; border-width:.4pt 0 0 .4pt; }
 .corner-tr { top:0; right:0; border-width:.4pt .4pt 0 0; }
 .corner-bl { bottom:0; left:0; border-width:0 0 .4pt .4pt; }
 .corner-br { bottom:0; right:0; border-width:0 .4pt .4pt 0; }
-.certificate-meta { width:100%; flex:none; border-collapse:collapse; font-size:12pt; }
-.certificate-meta tr { height:23mm; }
-.certificate-meta td { vertical-align:middle; border-bottom:.4pt solid #bbb; }
-.certificate-meta td:first-child { width:29%; }
+.certificate-meta { width:100%; border-collapse:collapse; font-size:9pt; }
+.certificate-meta tr { height:28mm; }
+.certificate-meta td { vertical-align:middle; }
+.certificate-meta td:first-child { width:26%; }
 .certificate-meta td:nth-child(2) { width:5%; }
-.certificate-meta td:first-child, .certificate-meta td:last-child { font-weight:bold; }
-.certificate-meta td:last-child { font-size:14pt; }
-.certificate-number { align-self:flex-end; margin-top:6mm; padding:3mm 5mm; border:.6pt solid #777; font-size:12pt; font-weight:bold; }
-.certificate-statement { flex:1; min-height:45mm; margin-top:9mm; padding-top:6mm; border-top:.6pt solid #777; font-size:12pt; line-height:1.65; }
-.certificate-statement h2 { margin:0 0 5mm; font-size:15pt; font-weight:bold; text-decoration:underline; }
-.certificate-signature { display:grid; grid-template-columns:1fr 1fr; gap:14mm; align-items:end; margin-top:8mm; padding-top:6mm; border-top:.6pt solid #777; font-size:11pt; line-height:1.4; }
-.signature-line { width:100%; height:14mm; margin-top:6mm; border-bottom:.6pt solid #111; }
-.signature-date-line { height:14mm; margin-top:6mm; border-bottom:.6pt solid #111; }
+.certificate-number { position:absolute; left:8mm; bottom:20mm; font-size:9pt; }
+.certificate-statement { margin-top:6mm; font-size:9pt; line-height:1.45; }
+.certificate-statement h2 { margin:0 0 1mm; font-size:9pt; font-weight:normal; text-decoration:underline; }
+.certificate-signature { position:absolute; left:8mm; bottom:47mm; font-size:9pt; line-height:1.4; }
+.signature-line { width:68mm; height:6mm; margin-top:35mm; border-bottom:.6pt solid #111; }
 .table-pages { page:tables; page-break-before:always; break-before:page; }
 .section-title { margin:0 0 4mm; font-size:13pt; text-transform:uppercase; }
 .data-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7pt; margin:3mm 0 6mm; }
@@ -88,12 +86,10 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
 </section>
 
 <section class="certificate-page" id="section-certificate">
-  <span class="corner corner-tl"></span><span class="corner corner-tr"></span>
-  <span class="corner corner-bl"></span><span class="corner corner-br"></span>
   <table class="certificate-meta"><tbody>
-    <tr><td><strong>Client</strong></td><td>:</td><td><strong>{{ project.client_name or "Not provided" }}</strong></td></tr>
-    <tr><td><strong>Location</strong></td><td>:</td><td><strong>{{ project.location or "Not provided" }}</strong></td></tr>
-    <tr><td><strong>Date of Survey</strong></td><td>:</td><td><strong>{{ project.survey_start_date.strftime("%d %b %Y") if project.survey_start_date else "Not provided" }}{% if project.survey_end_date and project.survey_end_date != project.survey_start_date %} &amp; {{ project.survey_end_date.strftime("%d %b %Y") }}{% endif %}</strong></td></tr>
+    <tr><td>Client</td><td>:</td><td><strong>{{ project.client_name or "Not provided" }}</strong></td></tr>
+    <tr><td>Location</td><td>:</td><td><strong>{{ project.location or "Not provided" }}</strong></td></tr>
+    <tr><td>Date of Survey</td><td>:</td><td><strong>{{ project.survey_start_date.strftime("%d %b %Y") if project.survey_start_date else "Not provided" }}{% if project.survey_end_date and project.survey_end_date != project.survey_start_date %} &amp; {{ project.survey_end_date.strftime("%d %b %Y") }}{% endif %}</strong></td></tr>
   </tbody></table>
   <div class="certificate-number">EUSR Certificate No.: {{ project.eusr_certificate_no or "Not provided" }}</div>
   <div class="certificate-statement">
@@ -101,15 +97,9 @@ html, body { margin:0; padding:0; font-family:Arial,"Liberation Sans",sans-serif
     <div>{{ fixed_sections.get("statement", {}).get("content", "Statement of Conformity content has not been configured for this report template.") }}</div>
   </div>
   <div class="certificate-signature">
-    <div class="certificate-signatory">
-      <div>For and on behalf of<br>{{ company.company_name }}</div>
-      <div class="signature-line"></div>
-      <div>{{ project.project_manager_name or "Mr. Wong Kwok Kwong" }}</div>
-    </div>
-    <div class="certificate-signing-date">
-      <strong>Date of Signature</strong>
-      <div class="signature-date-line"></div>
-    </div>
+    <div>For and on behalf of<br>{{ company.company_name }}</div>
+    <div class="signature-line"></div>
+    <div>{{ project.project_manager_name or "Mr. Wong Kwok Kwong" }}</div>
   </div>
 </section>
 
