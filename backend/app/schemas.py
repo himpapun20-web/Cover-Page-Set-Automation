@@ -99,6 +99,7 @@ class AssetInput(InputModel):
 class WinCanPipeRowInput(InputModel):
     pipe_id: str = Field(min_length=1, max_length=100)
     section_reference: str | None = Field(default=None, max_length=100)
+    inspection_date: date | None = None
     start_manhole: str | None = Field(default=None, max_length=100)
     finish_manhole: str | None = Field(default=None, max_length=100)
     function_code: str | None = Field(default=None, max_length=20)
