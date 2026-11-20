@@ -90,7 +90,7 @@ export default function ReportPreview({ canGenerate, canUpload }: Props) {
         </div>
       </section>
       <section className="panel batch-panel">
-        <div className="panel-heading"><div><div className="eyebrow">WINCAN VX / PDF AND EXCEL IMPORT</div><h2>Upload and import report</h2><p>Pipe sections are extracted and saved automatically. Scanned PDFs and spreadsheet values stored as images are processed with OCR; no manual row entry or confirmation is needed.</p></div>
+        <div className="panel-heading"><div><div className="eyebrow">WINCAN VX / PDF AND EXCEL IMPORT</div><h2>Upload and import report</h2><p>Pipe sections are extracted and saved automatically. Scanned PDFs and image-only values in smaller Excel workbooks use OCR; large WinCan exports are read in streaming mode to extract pipe and inspection details.</p></div>
           {canUpload && <label className="button button-primary"><Upload size={15} /> {importing ? 'Extracting and saving…' : 'Select WinCan PDF or Excel'}<input type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" hidden disabled={importing} onChange={(event) => { void importReport(event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>}
         </div>
         {fileName && <p className="small">Last imported report: <strong>{fileName}</strong></p>}
